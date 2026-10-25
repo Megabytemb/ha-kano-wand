@@ -23,6 +23,8 @@ from .const import (
     ATTR_PATTERN,
     DOMAIN,
     EVENT_KANO_WAND_SPELL,
+    EVENT_KANO_WAND_STATUS,
+    EVENT_TYPE_RECENTRE,
     SERVICE_VIBRATE,
     SIGNAL_WAND_BATTERY,
     SIGNAL_WAND_BUTTON,
@@ -92,9 +94,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.async_add_executor_job(gesture_spells.loadModel)
 
     @callback
+    def _get_device_id() -> str | None:
+        dev_reg = dr.async_get(hass)
+        if hasattr(dev_reg, "async_get_device"):
+            if device := dev_reg.async_get_device(identifiers={(DOMAIN, address)}):
+                return getattr(device, "id", None)
+        return None
+
+    @callback
     def _on_button(pressed: bool) -> None:
         async_dispatcher_send(
             hass, SIGNAL_WAND_BUTTON.format(entry.entry_id), pressed
+        )
+        hass.bus.async_fire(
+            EVENT_KANO_WAND_STATUS,
+            {
+                ATTR_DEVICE_ID: _get_device_id(),
+                "entry_id": entry.entry_id,
+                "address": address,
+                "name": entry.title,
+                "type": "button_pressed" if pressed else "button_released",
+            },
         )
 
     @callback
@@ -102,13 +122,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         async_dispatcher_send(
             hass, SIGNAL_WAND_SPELL.format(entry.entry_id), spell_data
         )
+        spell = spell_data.get("spell")
         hass.bus.async_fire(
             EVENT_KANO_WAND_SPELL,
             {
+                ATTR_DEVICE_ID: _get_device_id(),
                 "entry_id": entry.entry_id,
                 "address": address,
                 "name": entry.title,
-                "spell": spell_data.get("spell"),
+                "spell": spell,
+                "is_spell": spell is not None and spell != EVENT_TYPE_RECENTRE,
                 "score": spell_data.get("score"),
                 "duration": spell_data.get("duration"),
                 "points": spell_data.get("points"),
@@ -127,6 +150,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _clear_ble_advertisement_history(address)
         async_dispatcher_send(
             hass, SIGNAL_WAND_CONNECTED.format(entry.entry_id), connected
+        )
+        hass.bus.async_fire(
+            EVENT_KANO_WAND_STATUS,
+            {
+                ATTR_DEVICE_ID: _get_device_id(),
+                "entry_id": entry.entry_id,
+                "address": address,
+                "name": entry.title,
+                "type": "connected" if connected else "disconnected",
+            },
         )
 
     @callback

@@ -41,6 +41,12 @@ def _install_ha_stubs() -> None:
     const = types.ModuleType("homeassistant.const")
     const.CONF_ADDRESS = "address"
     const.ATTR_DEVICE_ID = "device_id"
+    const.CONF_DEVICE_ID = "device_id"
+    const.CONF_DOMAIN = "domain"
+    const.CONF_EVENT = "event"
+    const.CONF_PLATFORM = "platform"
+    const.CONF_TYPE = "type"
+    const.CONF_CONDITION = "condition"
     const.PERCENTAGE = "%"
 
     class Platform:
@@ -145,6 +151,9 @@ def _install_ha_stubs() -> None:
 
     core.HomeAssistant = FakeHomeAssistant
     core.ServiceCall = Any
+    core.Context = Any
+    core.Event = Any
+    core.CALLBACK_TYPE = Callable[[], None]
     sys.modules["homeassistant.core"] = core
 
     # homeassistant.config_entries
@@ -288,16 +297,63 @@ def _install_ha_stubs() -> None:
     helpers = types.ModuleType("homeassistant.helpers")
     sys.modules["homeassistant.helpers"] = helpers
 
+    class _ExtendableSchema:
+        def __init__(self, base: dict[str, Any] | None = None) -> None:
+            self.base = base or {}
+
+        def extend(self, extra: dict[str, Any]) -> _ExtendableSchema:
+            return _ExtendableSchema({**self.base, **extra})
+
+        def __call__(self, value: Any) -> Any:
+            return value
+
     cv = types.ModuleType("homeassistant.helpers.config_validation")
     cv.ensure_list = lambda x: x if isinstance(x, list) else [x]
     cv.string = str
+    cv.DEVICE_ACTION_BASE_SCHEMA = _ExtendableSchema()
+    cv.DEVICE_CONDITION_BASE_SCHEMA = _ExtendableSchema()
     helpers.config_validation = cv
     sys.modules["homeassistant.helpers.config_validation"] = cv
+
+    cond_mod = types.ModuleType("homeassistant.helpers.condition")
+    cond_mod.ConditionCheckerType = Callable[..., bool]
+    helpers.condition = cond_mod
+    sys.modules["homeassistant.helpers.condition"] = cond_mod
+
+    trig_mod = types.ModuleType("homeassistant.helpers.trigger")
+    trig_mod.TriggerActionType = Callable[..., Any]
+    trig_mod.TriggerInfo = dict[str, Any]
+    helpers.trigger = trig_mod
+    sys.modules["homeassistant.helpers.trigger"] = trig_mod
+
+    typ_mod = types.ModuleType("homeassistant.helpers.typing")
+    typ_mod.ConfigType = dict[str, Any]
+    typ_mod.TemplateVarsType = dict[str, Any] | None
+    helpers.typing = typ_mod
+    sys.modules["homeassistant.helpers.typing"] = typ_mod
+
+    da_mod = types.ModuleType("homeassistant.components.device_automation")
+    da_mod.DEVICE_TRIGGER_BASE_SCHEMA = _ExtendableSchema()
+    sys.modules["homeassistant.components.device_automation"] = da_mod
+
+    ha_comp_mod = types.ModuleType("homeassistant.components.homeassistant")
+    ha_trig_mod = types.ModuleType("homeassistant.components.homeassistant.triggers")
+    ev_trig_mod = types.ModuleType("homeassistant.components.homeassistant.triggers.event")
+    ev_trig_mod.CONF_PLATFORM = "platform"
+    ev_trig_mod.CONF_EVENT_TYPE = "event_type"
+    ev_trig_mod.CONF_EVENT_DATA = "event_data"
+    ev_trig_mod.TRIGGER_SCHEMA = lambda x: x
+    ev_trig_mod.async_attach_trigger = AsyncMock(return_value=lambda: None)
+    ha_trig_mod.event = ev_trig_mod
+    ha_comp_mod.triggers = ha_trig_mod
+    sys.modules["homeassistant.components.homeassistant"] = ha_comp_mod
+    sys.modules["homeassistant.components.homeassistant.triggers"] = ha_trig_mod
+    sys.modules["homeassistant.components.homeassistant.triggers.event"] = ev_trig_mod
 
     dr = types.ModuleType("homeassistant.helpers.device_registry")
     dr.CONNECTION_BLUETOOTH = "bluetooth"
     dr.DeviceInfo = dict
-    dr.async_get = lambda hass: MagicMock()
+    dr.async_get = lambda hass: getattr(hass, "_device_registry", MagicMock())
     helpers.device_registry = dr
     sys.modules["homeassistant.helpers.device_registry"] = dr
 

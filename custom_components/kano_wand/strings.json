@@ -16,5 +16,61 @@
       "no_devices_found": "No devices found",
       "cannot_connect": "Failed to connect"
     }
+  },
+  "device_automation": {
+    "trigger_type": {
+      "any_spell": "Any spell is cast",
+      "spell_cast": "Spell cast: {subtype}",
+      "recentre": "Button short-clicked (Recentre orientation)",
+      "button_pressed": "Wand button pressed",
+      "button_released": "Wand button released",
+      "connected": "Wand connected",
+      "disconnected": "Wand disconnected"
+    },
+    "trigger_subtype": {
+      "Accio": "Accio",
+      "Aguamenti": "Aguamenti",
+      "Alohomora": "Alohomora",
+      "Avis": "Avis",
+      "Bombarda": "Bombarda",
+      "Colovaria": "Colovaria",
+      "Engorgio": "Engorgio",
+      "Epoximise": "Epoximise",
+      "Evanesco": "Evanesco",
+      "Expelliarmus": "Expelliarmus",
+      "Flipendo": "Flipendo",
+      "Fumos": "Fumos",
+      "Gemino": "Gemino",
+      "Impedimenta": "Impedimenta",
+      "Incendio": "Incendio",
+      "Locomotor": "Locomotor",
+      "Lumos": "Lumos",
+      "Oppugno": "Oppugno",
+      "Orchideous": "Orchideous",
+      "Reducio": "Reducio",
+      "Reducto": "Reducto",
+      "Reparo": "Reparo",
+      "Serpensortia": "Serpensortia",
+      "Vermillious": "Vermillious",
+      "Wingardium Leviosa": "Wingardium Leviosa"
+    },
+    "action_type": {
+      "vibrate_regular": "Vibrate wand (Regular)",
+      "vibrate_short": "Vibrate wand (Short)",
+      "vibrate_burst": "Vibrate wand (Burst)",
+      "vibrate_long": "Vibrate wand (Long)",
+      "vibrate_short_long": "Vibrate wand (Short-Long)",
+      "vibrate_short_short": "Vibrate wand (Short-Short)",
+      "vibrate_big_pause": "Vibrate wand (Big Pause)",
+      "led_turn_on": "Turn on wand tip LED",
+      "led_turn_off": "Turn off wand tip LED",
+      "recentre": "Recentre wand orientation",
+      "disconnect": "Disconnect wand"
+    },
+    "condition_type": {
+      "is_connected": "Wand is connected",
+      "is_disconnected": "Wand is disconnected",
+      "is_button_pressed": "Wand button is pressed"
+    }
   }
 }

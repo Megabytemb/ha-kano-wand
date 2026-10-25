@@ -112,9 +112,27 @@ The TFLite model recognizes the following 25 spell gestures (plus `recentre` on 
 
 ---
 
-## 🤖 Automation Examples
+## 🤖 Automations (Visual Device Automations & YAML)
 
-### 1. Triggering on the `event.kano_wand_spell` Entity
+### 1. Visual Device Automations (Recommended — Zero YAML Required)
+Click **+ (Create Automation)** directly on the Kano Wand Device page in Home Assistant to access built-in **Device Triggers**, **Device Conditions**, and **Device Actions**:
+
+- **Device Triggers ("When")**:
+  - **Spell cast: `<Spell Name>`** (individual dropdown items for all 25 spells: *Spell cast: Lumos*, *Spell cast: Wingardium Leviosa*, *Spell cast: Incendio*, etc.)
+  - **Any spell is cast**
+  - **Button short-clicked (Recentre orientation)**
+  - **Wand button pressed** / **Wand button released**
+  - **Wand connected** / **Wand disconnected**
+- **Device Conditions ("And if")**:
+  - **Wand is connected** / **Wand is disconnected**
+  - **Wand button is pressed**
+- **Device Actions ("Then do")**:
+  - **Vibrate wand (`Regular` / `Short` / `Burst` / `Long` / `Short-Long` / `Short-Short` / `Big Pause`)**
+  - **Turn on wand tip LED** / **Turn off wand tip LED**
+  - **Recentre wand orientation**
+  - **Disconnect wand**
+
+### 2. Triggering on the `event.kano_wand_spell` Entity
 Using the `event` entity ensures the automation triggers even if you cast *Lumos* twice in a row:
 
 ```yaml
@@ -141,7 +159,7 @@ actions:
       pattern: short
 ```
 
-### 2. Triggering via the `kano_wand_spell` Event Bus Event
+### 3. Triggering via the `kano_wand_spell` Event Bus Event
 Every spell also fires a `kano_wand_spell` event directly on the Home Assistant event bus:
 
 ```yaml
