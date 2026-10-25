@@ -1,62 +1,81 @@
-"""Test the Kano Wand config flow."""
-from unittest.mock import patch
+"""Tests for the Kano Wand Bluetooth and User Config Flow."""
+from __future__ import annotations
 
-from homeassistant import config_entries
+from unittest.mock import MagicMock, patch
+
 from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
-from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResultType
 
-from custom_components.kano_wand.const import DOMAIN
+from custom_components.kano_wand.config_flow import KanoWandConfigFlow, _is_kano_wand
+from custom_components.kano_wand.const import SERVICE_INFO
 
-async def test_bluetooth_discovery(hass: HomeAssistant, mock_bluetooth_service_info) -> None:
-    """Test bluetooth discovery."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN,
-        context={"source": config_entries.SOURCE_BLUETOOTH},
-        data=mock_bluetooth_service_info,
+
+def _make_discovery_info(
+    name: str = "Kano-Wand-75",
+    address: str = "AA:BB:CC:DD:EE:FF",
+    service_uuids: list[str] | None = None,
+) -> BluetoothServiceInfoBleak:
+    return BluetoothServiceInfoBleak(
+        name=name,
+        address=address,
+        rssi=-60,
+        manufacturer_data={},
+        service_data={},
+        service_uuids=service_uuids or [SERVICE_INFO.lower()],
+        source="local",
+        device=MagicMock(),
+        advertisement=MagicMock(),
     )
-    assert result["type"] == FlowResultType.FORM
+
+
+def test_is_kano_wand_matcher() -> None:
+    """Verify _is_kano_wand matches by local_name prefix or Kano GATT service UUID."""
+    assert _is_kano_wand(_make_discovery_info(name="Kano-Wand-11-c9-05", service_uuids=[])) is True
+    assert _is_kano_wand(_make_discovery_info(name="Unknown", service_uuids=[SERVICE_INFO])) is True
+    assert _is_kano_wand(_make_discovery_info(name="Other-BLE", service_uuids=["0000180f-0000-1000-8000-00805f9b34fb"])) is False
+
+
+async def test_bluetooth_discovery_and_confirm_flow(hass) -> None:
+    """Test automatic Bluetooth discovery step followed by user confirmation."""
+    flow = KanoWandConfigFlow()
+    flow.hass = hass
+    discovery = _make_discovery_info(name="Kano-Wand-75", address="AA:BB:CC:DD:EE:FF")
+
+    result = await flow.async_step_bluetooth(discovery)
+    assert result["type"] == "form"
     assert result["step_id"] == "bluetooth_confirm"
+    assert flow.unique_id == "AA:BB:CC:DD:EE:FF"
+
+    result2 = await flow.async_step_bluetooth_confirm(user_input={})
+    assert result2["type"] == "create_entry"
+    assert result2["title"] == "Kano-Wand-75"
+    assert result2["data"] == {"address": "AA:BB:CC:DD:EE:FF"}
+
+
+async def test_user_flow_discovery_and_no_devices(hass) -> None:
+    """Test manual user flow when a wand is discovered and when no wand is in range."""
+    flow = KanoWandConfigFlow()
+    flow.hass = hass
+
+    # 1. No devices in range -> aborts with no_devices_found
+    result_empty = await flow.async_step_user()
+    assert result_empty == {"type": "abort", "reason": "no_devices_found"}
+
+    # 2. Device discovered -> shows selection form and creates entry
+    flow2 = KanoWandConfigFlow()
+    flow2.hass = hass
+    discovery = _make_discovery_info(name="Kano-Wand-75", address="AA:BB:CC:DD:EE:FF")
 
     with patch(
-        "custom_components.kano_wand.async_setup_entry", return_value=True
-    ) as mock_setup:
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            user_input={},
-        )
-        await hass.async_block_till_done()
-
-    assert result["type"] == FlowResultType.CREATE_ENTRY
-    assert result["title"] == "Kano-Wand-Test"
-    assert result["data"] == {
-        "address": "AA:BB:CC:DD:EE:FF",
-    }
-    assert len(mock_setup.mock_calls) == 1
-
-async def test_user_flow(hass: HomeAssistant, mock_bluetooth_service_info) -> None:
-    """Test user-initiated flow."""
-    with patch(
-        "homeassistant.components.bluetooth.async_discovered_service_info",
-        return_value=[mock_bluetooth_service_info],
+        "custom_components.kano_wand.config_flow.async_discovered_service_info",
+        return_value=[discovery],
     ):
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={"source": config_entries.SOURCE_USER}
-        )
-    
-    assert result["type"] == FlowResultType.FORM
-    assert result["step_id"] == "user"
+        form_res = await flow2.async_step_user()
+        assert form_res["type"] == "form"
+        assert form_res["step_id"] == "user"
 
-    with patch(
-        "custom_components.kano_wand.async_setup_entry", return_value=True
-    ) as mock_setup:
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            user_input={"address": "AA:BB:CC:DD:EE:FF"},
+        entry_res = await flow2.async_step_user(
+            user_input={"address": "AA:BB:CC:DD:EE:FF"}
         )
-        await hass.async_block_till_done()
-
-    assert result["type"] == FlowResultType.CREATE_ENTRY
-    assert result["data"] == {
-        "address": "AA:BB:CC:DD:EE:FF",
-    }
+        assert entry_res["type"] == "create_entry"
+        assert entry_res["title"] == "Kano-Wand-75"
+        assert entry_res["data"] == {"address": "AA:BB:CC:DD:EE:FF"}

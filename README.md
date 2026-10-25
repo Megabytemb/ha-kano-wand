@@ -164,10 +164,10 @@ This repository uses [`uv`](https://docs.astral.sh/uv/) for dependency managemen
 uv sync
 ```
 
-### 2. Run Automated Home Assistant Integration Tests
-Verifies `async_setup_entry`, Bluetooth proxy wake-up callbacks, all 9 entities across 7 platforms, `kano_wand.vibrate`, and clean unload:
+### 2. Run Pytest Test Suite
+Runs all unit, integration, TFLite gesture recognition, PNG rendering, and metadata tests:
 ```powershell
-uv run python tests/test_ha_integration.py
+uv run pytest
 ```
 
 ### 3. Run Offline TFLite Gesture Model Check
@@ -213,10 +213,13 @@ uv run python tests/live_ble_test.py
 │       ├── strings.json          # UI strings
 │       └── wand.py               # KanoWand BLE client (bleak-retry-connector)
 ├── tests/
-│   ├── conftest.py               # Pytest fixtures
+│   ├── conftest.py               # Shared pytest fixtures & HA test stubs
 │   ├── live_ble_test.py          # Interactive CLI live hardware BLE test harness
-│   ├── test_config_flow.py       # Config flow unit tests
-│   └── test_ha_integration.py    # End-to-end HA component & entity test suite
+│   ├── test_config_flow.py       # Bluetooth & user config flow tests
+│   ├── test_drawing.py           # Poster PNG renderer tests
+│   ├── test_entities.py          # Home Assistant entity & BLE lifecycle tests
+│   ├── test_gesture.py           # TFLite spell recognition & fitCurve tests
+│   └── test_metadata.py          # Manifest, HACS, translation & brand PNG tests
 ├── hacs.json                     # HACS repository metadata
 ├── pyproject.toml                # Project dependencies for uv
 └── README.md
