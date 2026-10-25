@@ -1,0 +1,32 @@
+vibrate:
+  name: Vibrate
+  description: Trigger a haptic vibration pattern on the Kano Wand.
+  fields:
+    device_id:
+      name: Device
+      description: Optional Kano Wand device(s) to vibrate. Defaults to all configured wands.
+      selector:
+        device:
+          integration: kano_wand
+    pattern:
+      name: Pattern
+      description: Vibration pattern name or integer (1-7).
+      default: "regular"
+      required: false
+      selector:
+        select:
+          options:
+            - label: "Regular (1)"
+              value: "regular"
+            - label: "Short (2)"
+              value: "short"
+            - label: "Burst (3)"
+              value: "burst"
+            - label: "Long (4)"
+              value: "long"
+            - label: "Short-Long (5)"
+              value: "short_long"
+            - label: "Short-Short (6)"
+              value: "short_short"
+            - label: "Big Pause (7)"
+              value: "big_pause"
