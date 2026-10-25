@@ -1,6 +1,7 @@
 """The Kano Wand integration."""
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import Any
 
@@ -58,6 +59,29 @@ SERVICE_VIBRATE_SCHEMA = vol.Schema(
 )
 
 
+def _clear_ble_advertisement_history(address: str) -> None:
+    """Clear habluetooth's cached advertisement history for the wand's MAC address.
+
+    Because the Kano Wand broadcasts a static advertisement payload (its name,
+    service UUIDs, and manufacturer data never change), habluetooth's duplicate
+    advertisement filter (`_scanner_adv_received`) would otherwise ignore wake-up
+    advertisements for up to 15 minutes after a disconnect.
+    """
+    with contextlib.suppress(Exception):
+        from habluetooth import get_manager
+
+        manager = get_manager()
+        if manager is None:
+            return
+        if hasattr(manager, "async_clear_advertisement_history"):
+            manager.async_clear_advertisement_history(address)
+        else:
+            if hasattr(manager, "_all_history"):
+                manager._all_history.pop(address, None)
+            if hasattr(manager, "_connectable_history"):
+                manager._connectable_history.pop(address, None)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Kano Wand from a config entry."""
     address: str = entry.data[CONF_ADDRESS]
@@ -98,6 +122,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     @callback
     def _on_connected(connected: bool) -> None:
+        if not connected:
+            _clear_ble_advertisement_history(address)
         async_dispatcher_send(
             hass, SIGNAL_WAND_CONNECTED.format(entry.entry_id), connected
         )
@@ -139,12 +165,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     @callback
-    def _async_on_ble_advertisement(
-        service_info: bluetooth.BluetoothServiceInfoBleak,
-        change: bluetooth.BluetoothChange,
-    ) -> None:
-        """Reconnect automatically when the wand wakes up in range of any proxy."""
-        if wand.auto_connect and not wand.is_connected:
+    def _async_trigger_connect(service_info: bluetooth.BluetoothServiceInfoBleak) -> None:
+        """Schedule a background BLE connection when an advertisement is heard."""
+        if wand.auto_connect and not wand.is_connected and not wand.is_connecting:
             _LOGGER.debug(
                 "Advertisement received for %s via %s (RSSI %s); scheduling connection",
                 address,
@@ -157,6 +180,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 f"kano_wand_connect_{entry.entry_id}",
             )
 
+    @callback
+    def _async_on_ble_advertisement(
+        service_info: bluetooth.BluetoothServiceInfoBleak,
+        change: bluetooth.BluetoothChange,
+    ) -> None:
+        """Reconnect automatically when the wand wakes up in range of any proxy."""
+        _async_trigger_connect(service_info)
+
     entry.async_on_unload(
         bluetooth.async_register_callback(
             hass,
@@ -165,6 +196,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             bluetooth.BluetoothScanningMode.ACTIVE,
         )
     )
+
+    # Also subscribe to raw per-packet advertisements on habluetooth's manager if available.
+    # This fires before habluetooth's unchanged-payload deduplication guard, ensuring
+    # instant reconnection whenever the wand button is pressed to wake it up.
+    with contextlib.suppress(Exception):
+        from habluetooth import get_manager
+
+        manager = get_manager()
+        if manager is not None and hasattr(
+            manager, "async_register_advertisement_callback"
+        ):
+            entry.async_on_unload(
+                manager.async_register_advertisement_callback(
+                    _async_trigger_connect, address
+                )
+            )
 
     # Attempt an initial connection in the background if the wand is already awake
     if wand.auto_connect and _get_ble_device() is not None:

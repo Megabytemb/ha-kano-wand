@@ -111,6 +111,11 @@ class KanoWand:
             and self.client.is_connected
         )
 
+    @property
+    def is_connecting(self) -> bool:
+        """Return True if a connection attempt is currently in progress."""
+        return self._connect_lock.locked()
+
     def _spawn_background_task(
         self, coro: Any, name: str
     ) -> asyncio.Task[Any]:
@@ -170,15 +175,19 @@ class KanoWand:
                     self.name,
                     self._on_disconnected,
                     use_services_cache=True,
-                    ble_device_callback=self._ble_device_callback,
+                    ble_device_callback=lambda: self._ble_device_callback() or device,
                 )
             except (BleakError, TimeoutError, OSError) as ex:
                 _LOGGER.debug("Failed to connect to %s: %s", self.name, ex)
                 self.client = None
+                if self.on_connected_cb:
+                    self.on_connected_cb(False)
                 return False
             except Exception as ex:
                 _LOGGER.warning("Unexpected error connecting to %s: %s", self.name, ex)
                 self.client = None
+                if self.on_connected_cb:
+                    self.on_connected_cb(False)
                 return False
 
             try:
