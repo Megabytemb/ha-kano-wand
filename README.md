@@ -46,12 +46,19 @@ A custom Home Assistant integration for the **Kano Coding Wand**, built on Home 
 | `event` | `event.kano_wand_spell` | **Spell** | Stateless event entity that triggers on every recognized spell (plus `"recentre"` on a short `<0.2s` button tap). Fires reliably even when casting the exact same spell twice in a row. Attributes: `score`, `duration`, `points`. |
 | `image` | `image.kano_wand_last_spell_drawing` | **Last Spell Drawing** | Poster-styled PNG diagram of the last wand motion path (with start dot, glowing golden trail, directional arrowhead, spell name, score, duration, and sample count) for easy debugging on dashboards. |
 | `sensor` | `sensor.kano_wand_last_spell` | **Last Spell** | Displays the most recently recognized spell name on dashboards. Attributes: `score`, `duration`, `points`. |
+| `sensor` | `sensor.kano_wand_last_spell_confidence` | **Last Spell Confidence** | Confidence score (`%`, `0`–`100%`) of the most recently recognized spell. |
 | `binary_sensor` | `binary_sensor.kano_wand_button` | **Button** | `on` while the wand button is held down; `off` when released. |
 | `binary_sensor` | `binary_sensor.kano_wand_connected` | **Connected** | Diagnostic connectivity sensor (`on` when actively connected to a BLE proxy/adapter). |
 | `light` | `light.kano_wand_led` | **LED** | RGB light controlling the LED on the tip of the wand (`ColorMode.RGB`). |
+| `select` | `select.kano_wand_vibration_pattern` | **Vibration Pattern** | Choose from all 7 hardware haptic vibration patterns (`regular`, `short`, `burst`, `long`, `short_long`, `short_short`, `big_pause`). Selecting an option previews it immediately if connected. |
+| `button` | `button.kano_wand_vibrate` | **Vibrate** | Triggers the currently selected **Vibration Pattern** on the wand. |
+| `button` | `button.kano_wand_recentre` | **Recentre Orientation** | Resets the wand's internal quaternion orientation origin. |
+| `button` | `button.kano_wand_disconnect` | **Disconnect** | Immediately disconnects the active BLE session so the wand can sleep right away. |
 | `number` | `number.kano_wand_keep_alive_timeout` | **Keep Alive Timeout** | Configuration slider (`0.0`–`30.0` min, step `0.5` min, default `3.0` min) controlling how long the wand stays awake after activity. Persisted across restarts. |
+| `number` | `number.kano_wand_min_spell_confidence` | **Minimum Spell Confidence** | Configuration slider (`0%`–`95%`, step `5%`, default `0%`) to ignore accidental low-confidence gestures before firing spell events. Persisted across restarts. |
 | `switch` | `switch.kano_wand_auto_connect` | **Auto Connect** | Configuration switch (default `on`). Turn `off` to immediately disconnect Home Assistant from the wand and pause automatic BLE reconnection (e.g., for local PC testing). Persisted across restarts. |
-| `button` | `button.kano_wand_vibrate` | **Vibrate** | Triggers a regular haptic vibration pulse on the wand. |
+| `switch` | `switch.kano_wand_vibrate_on_connect` | **Vibrate on Connect** | Configuration switch (default `on`) controlling whether the wand vibrates (`burst`) and lights its LED when connecting. |
+| `switch` | `switch.kano_wand_vibrate_on_spell` | **Vibrate on Spell** | Configuration switch (default `on`) controlling whether the wand gives a short haptic pulse when a spell gesture is recognized. |
 
 ---
 

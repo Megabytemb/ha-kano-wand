@@ -52,6 +52,7 @@ def _install_ha_stubs() -> None:
         BUTTON = "button"
         IMAGE = "image"
         SWITCH = "switch"
+        SELECT = "select"
 
     class EntityCategory:
         CONFIG = "config"
@@ -452,6 +453,20 @@ def _install_ha_stubs() -> None:
 
     sw_mod.SwitchEntity = SwitchEntity
     sys.modules["homeassistant.components.switch"] = sw_mod
+
+    sel_mod = types.ModuleType("homeassistant.components.select")
+
+    class SelectEntity(Entity):
+        @property
+        def current_option(self) -> str | None:
+            return getattr(self, "_attr_current_option", None)
+
+        @property
+        def options(self) -> list[str]:
+            return getattr(self, "_attr_options", [])
+
+    sel_mod.SelectEntity = SelectEntity
+    sys.modules["homeassistant.components.select"] = sel_mod
 
     util_mod = types.ModuleType("homeassistant.util")
     dt_mod = types.ModuleType("homeassistant.util.dt")

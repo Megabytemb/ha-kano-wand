@@ -13,22 +13,31 @@ from homeassistant.components.bluetooth import (
 from custom_components.kano_wand import async_setup_entry, async_unload_entry
 from custom_components.kano_wand.const import (
     CHAR_LED,
+    CHAR_QUATERNIONS_RESET,
     CHAR_VIBRATOR,
     DOMAIN,
     SERVICE_VIBRATE,
 )
+from custom_components.kano_wand.diagnostics import async_get_config_entry_diagnostics
 
 
 EXPECTED_ENTITY_IDS = {
     "entry_123_last_spell",
+    "entry_123_last_spell_confidence",
     "entry_123_button",
     "entry_123_connected",
     "entry_123_spell_event",
     "entry_123_led",
     "entry_123_keep_alive_timeout",
+    "entry_123_min_spell_confidence",
     "entry_123_vibrate",
+    "entry_123_recentre",
+    "entry_123_disconnect",
     "entry_123_last_spell_drawing",
     "entry_123_auto_connect",
+    "entry_123_vibrate_on_connect",
+    "entry_123_vibrate_on_spell",
+    "entry_123_vibration_pattern",
 }
 
 
@@ -158,6 +167,40 @@ async def test_led_light_entity_and_vibrate_controls(
             CHAR_VIBRATOR, bytearray([3]), True
         )
 
+        # Select entity changes vibration pattern & previews immediately on wand
+        pattern_select = hass.entities["entry_123_vibration_pattern"]
+        assert pattern_select.current_option == "regular"
+        await pattern_select.async_select_option("short_long")
+        assert pattern_select.current_option == "short_long"
+        assert wand.vibration_pattern == "short_long"
+        fake_ble_client.write_gatt_char.assert_any_call(
+            CHAR_VIBRATOR, bytearray([5]), True
+        )
+
+        # Pressing Vibrate button now uses the selected "short_long" (5) pattern
+        fake_ble_client.write_gatt_char.reset_mock()
+        await vibrate_btn.async_press()
+        fake_ble_client.write_gatt_char.assert_called_once_with(
+            CHAR_VIBRATOR, bytearray([5]), True
+        )
+
+        # Recentre button writes CHAR_QUATERNIONS_RESET
+        recentre_btn = hass.entities["entry_123_recentre"]
+        await recentre_btn.async_press()
+        fake_ble_client.write_gatt_char.assert_any_call(
+            CHAR_QUATERNIONS_RESET, bytearray([1]), True
+        )
+
+        # Diagnostics export
+        diag = await async_get_config_entry_diagnostics(hass, config_entry)
+        assert diag["is_connected"] is True
+        assert diag["vibration_pattern"] == "short_long"
+
+        # Disconnect button disconnects immediately
+        disconnect_btn = hass.entities["entry_123_disconnect"]
+        await disconnect_btn.async_press()
+        assert hass.entities["entry_123_connected"].is_on is False
+
     await async_unload_entry(hass, config_entry)
 
 
@@ -169,6 +212,7 @@ async def test_spell_events_sensor_image_and_quaternion_stream(
     wand = hass.data[DOMAIN][config_entry.entry_id]
 
     spell_sensor = hass.entities["entry_123_last_spell"]
+    confidence_sensor = hass.entities["entry_123_last_spell_confidence"]
     spell_event = hass.entities["entry_123_spell_event"]
     spell_image = hass.entities["entry_123_last_spell_drawing"]
     button_sensor = hass.entities["entry_123_button"]
@@ -190,6 +234,7 @@ async def test_spell_events_sensor_image_and_quaternion_stream(
     wand.on_spell_cb(payload)
     assert spell_event.last_event_type == "Lumos"
     assert spell_sensor.native_value == "Lumos"
+    assert confidence_sensor.native_value == 96.0
     assert spell_image.extra_state_attributes["spell"] == "Lumos"
 
     # Short click (<0.2s) triggers recentre on EventEntity while keeping Last Spell sensor

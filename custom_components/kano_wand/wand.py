@@ -53,6 +53,7 @@ class KanoWand:
         on_battery: Callable[[int], None] | None = None,
         on_connected: Callable[[bool], None] | None = None,
         on_led: Callable[[bool, tuple[int, int, int]], None] | None = None,
+        on_device_info: Callable[[str | None, str | None], None] | None = None,
         gesture_spells: GestureSpells | None = None,
         vibrate_on_connect: bool = True,
     ) -> None:
@@ -64,7 +65,11 @@ class KanoWand:
         self.on_battery_cb = on_battery
         self.on_connected_cb = on_connected
         self.on_led_cb = on_led
+        self.on_device_info_cb = on_device_info
         self.vibrate_on_connect = vibrate_on_connect
+        self.vibrate_on_spell: bool = True
+        self.vibration_pattern: str = "regular"
+        self.min_spell_confidence: float = 0.0
 
         self.client: BleakClient | None = None
         self._connect_lock = asyncio.Lock()
@@ -259,6 +264,8 @@ class KanoWand:
                 with contextlib.suppress(Exception):
                     org = await self.client.read_gatt_char(CHAR_ORGANIZATION)
                     self.organization = org.decode("utf-8", errors="ignore").strip("\x00 ")
+                if self.on_device_info_cb:
+                    self.on_device_info_cb(self.software_version, self.hardware_version)
         except asyncio.CancelledError:
             pass
         except Exception as ex:
@@ -434,11 +441,26 @@ class KanoWand:
                 try:
                     cleaned_positions = self.gs.clean_trajectory(flipped_positions)
                     spell_data = self.gs.recognise(cleaned_positions)
-                    spell_data["duration"] = round(seconds, 3)
-                    spell_data["points"] = len(cleaned_positions)
-                    spell_data["positions"] = cleaned_positions
-                    if self.on_spell_cb:
-                        self.on_spell_cb(spell_data)
+                    score_pct = float(spell_data.get("score") or 0.0) * 100.0
+                    if score_pct >= self.min_spell_confidence:
+                        spell_data["duration"] = round(seconds, 3)
+                        spell_data["points"] = len(cleaned_positions)
+                        spell_data["positions"] = cleaned_positions
+                        if self.vibrate_on_spell and self.is_connected:
+                            self._spawn_background_task(
+                                self.vibrate(VIBRATION_SHORT),
+                                f"{self.name}_spell_vibrate",
+                            )
+                        if self.on_spell_cb:
+                            self.on_spell_cb(spell_data)
+                    else:
+                        _LOGGER.debug(
+                            "%s: Ignoring spell %s (confidence %.1f%% < minimum %.1f%%)",
+                            self.name,
+                            spell_data.get("spell"),
+                            score_pct,
+                            self.min_spell_confidence,
+                        )
                 except Exception as ex:
                     _LOGGER.warning("Error recognizing spell gesture: %s", ex)
 

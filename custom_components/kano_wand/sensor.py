@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import PERCENTAGE
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -21,7 +22,12 @@ async def async_setup_entry(
 ) -> None:
     """Set up Kano Wand sensors."""
     wand: KanoWand = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([KanoWandSpellSensor(entry, wand)])
+    async_add_entities(
+        [
+            KanoWandSpellSensor(entry, wand),
+            KanoWandSpellConfidenceSensor(entry, wand),
+        ]
+    )
 
 
 class KanoWandSpellSensor(KanoWandBaseEntity, SensorEntity):
@@ -71,3 +77,54 @@ class KanoWandSpellSensor(KanoWandBaseEntity, SensorEntity):
         }
         self.async_write_ha_state()
 
+
+class KanoWandSpellConfidenceSensor(KanoWandBaseEntity, SensorEntity):
+    """Sensor for the confidence percentage of the last recognized spell."""
+
+    _attr_name = "Last Spell Confidence"
+    _attr_icon = "mdi:bullseye-arrow"
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, entry: ConfigEntry, wand: KanoWand) -> None:
+        """Initialize the confidence sensor."""
+        super().__init__(entry, wand)
+        self._attr_unique_id = f"{entry.entry_id}_last_spell_confidence"
+        self._state: float | None = None
+        self._attrs: dict[str, Any] = {}
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the confidence percentage (0-100)."""
+        return self._state
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the state attributes."""
+        return self._attrs
+
+    async def async_added_to_hass(self) -> None:
+        """Handle entity which will be added."""
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                SIGNAL_WAND_SPELL.format(self.entry.entry_id),
+                self._update_spell,
+            )
+        )
+
+    @callback
+    def _update_spell(self, spell_data: dict[str, Any]) -> None:
+        """Update the spell confidence state."""
+        spell = spell_data.get("spell")
+        if spell == EVENT_TYPE_RECENTRE:
+            return
+        score = float(spell_data.get("score") or 0.0)
+        self._state = round(score * 100.0, 1)
+        self._attrs = {
+            "spell": spell,
+            "score": score,
+            "duration": spell_data.get("duration"),
+            "points": spell_data.get("points"),
+        }
+        self.async_write_ha_state()

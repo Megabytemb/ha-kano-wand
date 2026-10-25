@@ -1,4 +1,4 @@
-"""Switch platform for Kano Wand."""
+"""Switch platform for Kano Wand configuration toggles."""
 from __future__ import annotations
 
 from typing import Any
@@ -22,7 +22,13 @@ async def async_setup_entry(
 ) -> None:
     """Set up Kano Wand switches."""
     wand: KanoWand = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([KanoWandAutoConnectSwitch(entry, wand)])
+    async_add_entities(
+        [
+            KanoWandAutoConnectSwitch(entry, wand),
+            KanoWandVibrateOnConnectSwitch(entry, wand),
+            KanoWandVibrateOnSpellSwitch(entry, wand),
+        ]
+    )
 
 
 class KanoWandAutoConnectSwitch(KanoWandBaseEntity, SwitchEntity, RestoreEntity):
@@ -66,3 +72,73 @@ class KanoWandAutoConnectSwitch(KanoWandBaseEntity, SwitchEntity, RestoreEntity)
         self.wand.auto_connect = False
         self.async_write_ha_state()
         await self.wand.disconnect()
+
+
+class KanoWandVibrateOnConnectSwitch(KanoWandBaseEntity, SwitchEntity, RestoreEntity):
+    """Switch to toggle the welcome vibration and LED indicator on BLE connection."""
+
+    _attr_name = "Vibrate on Connect"
+    _attr_icon = "mdi:vibrate"
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, entry: ConfigEntry, wand: KanoWand) -> None:
+        """Initialize the switch."""
+        super().__init__(entry, wand)
+        self._attr_unique_id = f"{entry.entry_id}_vibrate_on_connect"
+        self._attr_is_on = wand.vibrate_on_connect
+
+    async def async_added_to_hass(self) -> None:
+        """Restore previous switch state on Home Assistant startup."""
+        await super().async_added_to_hass()
+        if (last_state := await self.async_get_last_state()) is not None:
+            if last_state.state in ("on", "off"):
+                is_on = last_state.state == "on"
+                self._attr_is_on = is_on
+                self.wand.vibrate_on_connect = is_on
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Enable vibration on connect."""
+        self._attr_is_on = True
+        self.wand.vibrate_on_connect = True
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Disable vibration on connect."""
+        self._attr_is_on = False
+        self.wand.vibrate_on_connect = False
+        self.async_write_ha_state()
+
+
+class KanoWandVibrateOnSpellSwitch(KanoWandBaseEntity, SwitchEntity, RestoreEntity):
+    """Switch to toggle short haptic feedback when a spell gesture is recognized."""
+
+    _attr_name = "Vibrate on Spell"
+    _attr_icon = "mdi:auto-fix"
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, entry: ConfigEntry, wand: KanoWand) -> None:
+        """Initialize the switch."""
+        super().__init__(entry, wand)
+        self._attr_unique_id = f"{entry.entry_id}_vibrate_on_spell"
+        self._attr_is_on = wand.vibrate_on_spell
+
+    async def async_added_to_hass(self) -> None:
+        """Restore previous switch state on Home Assistant startup."""
+        await super().async_added_to_hass()
+        if (last_state := await self.async_get_last_state()) is not None:
+            if last_state.state in ("on", "off"):
+                is_on = last_state.state == "on"
+                self._attr_is_on = is_on
+                self.wand.vibrate_on_spell = is_on
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Enable haptic feedback on recognized spell."""
+        self._attr_is_on = True
+        self.wand.vibrate_on_spell = True
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Disable haptic feedback on recognized spell."""
+        self._attr_is_on = False
+        self.wand.vibrate_on_spell = False
+        self.async_write_ha_state()

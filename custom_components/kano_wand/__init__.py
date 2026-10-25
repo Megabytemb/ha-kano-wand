@@ -46,6 +46,7 @@ PLATFORMS: list[Platform] = [
     Platform.BUTTON,
     Platform.IMAGE,
     Platform.SWITCH,
+    Platform.SELECT,
 ]
 
 SERVICE_VIBRATE_SCHEMA = vol.Schema(
@@ -134,6 +135,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass, SIGNAL_WAND_LED.format(entry.entry_id), led_on, rgb
         )
 
+    @callback
+    def _on_device_info(sw_version: str | None, hw_version: str | None) -> None:
+        dev_reg = dr.async_get(hass)
+        if device := dev_reg.async_get_device(identifiers={(DOMAIN, address)}):
+            dev_reg.async_update_device(
+                device.id,
+                sw_version=sw_version,
+                hw_version=hw_version,
+            )
+
     def _get_ble_device() -> Any:
         """Fetch the freshest BLEDevice routed via the closest proxy or adapter."""
         return bluetooth.async_ble_device_from_address(
@@ -148,6 +159,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         on_battery=_on_battery,
         on_connected=_on_connected,
         on_led=_on_led,
+        on_device_info=_on_device_info,
         gesture_spells=gesture_spells,
     )
 
