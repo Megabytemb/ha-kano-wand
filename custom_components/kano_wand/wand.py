@@ -70,6 +70,7 @@ class KanoWand:
         self._connect_lock = asyncio.Lock()
         self._expected_disconnect = False
         self._is_connected = False
+        self.auto_connect: bool = True
 
         self.conversion = WandConversion(WIDTH, HEIGHT)
         self.gs = gesture_spells or GestureSpells(load_immediately=True)
@@ -135,6 +136,10 @@ class KanoWand:
 
     async def ensure_connected(self, ble_device: BLEDevice | None = None) -> bool:
         """Connect to the wand if not already connected."""
+        if not self.auto_connect:
+            _LOGGER.debug("%s: Auto-connect is disabled; skipping connection", self.name)
+            return False
+
         if self.is_connected:
             return True
 

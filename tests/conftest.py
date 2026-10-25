@@ -51,6 +51,7 @@ def _install_ha_stubs() -> None:
         NUMBER = "number"
         BUTTON = "button"
         IMAGE = "image"
+        SWITCH = "switch"
 
     class EntityCategory:
         CONFIG = "config"
@@ -299,6 +300,21 @@ def _install_ha_stubs() -> None:
     helpers.device_registry = dr
     sys.modules["homeassistant.helpers.device_registry"] = dr
 
+    er = types.ModuleType("homeassistant.helpers.entity_registry")
+    er.async_get = lambda hass: getattr(hass, "_entity_registry", MagicMock(async_get_entity_id=MagicMock(return_value=None)))
+    helpers.entity_registry = er
+    sys.modules["homeassistant.helpers.entity_registry"] = er
+
+    rs = types.ModuleType("homeassistant.helpers.restore_state")
+
+    class RestoreEntity:
+        async def async_get_last_state(self) -> Any:
+            return None
+
+    rs.RestoreEntity = RestoreEntity
+    helpers.restore_state = rs
+    sys.modules["homeassistant.helpers.restore_state"] = rs
+
     disp = types.ModuleType("homeassistant.helpers.dispatcher")
 
     def _disp_send(hass: Any, signal: str, *args: Any) -> None:
@@ -420,12 +436,22 @@ def _install_ha_stubs() -> None:
     img_mod = types.ModuleType("homeassistant.components.image")
 
     class ImageEntity(Entity):
-        def __init__(self, hass: Any = None) -> None:
+        def __init__(self, hass: Any) -> None:
             super().__init__()
             self.hass = hass
 
     img_mod.ImageEntity = ImageEntity
     sys.modules["homeassistant.components.image"] = img_mod
+
+    sw_mod = types.ModuleType("homeassistant.components.switch")
+
+    class SwitchEntity(Entity):
+        @property
+        def is_on(self) -> bool | None:
+            return getattr(self, "_attr_is_on", None)
+
+    sw_mod.SwitchEntity = SwitchEntity
+    sys.modules["homeassistant.components.switch"] = sw_mod
 
     util_mod = types.ModuleType("homeassistant.util")
     dt_mod = types.ModuleType("homeassistant.util.dt")

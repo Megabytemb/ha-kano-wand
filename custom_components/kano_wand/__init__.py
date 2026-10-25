@@ -11,7 +11,11 @@ from homeassistant.components.bluetooth.match import ADDRESS, BluetoothCallbackM
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_DEVICE_ID, CONF_ADDRESS, Platform
 from homeassistant.core import HomeAssistant, ServiceCall, callback
-from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.helpers import (
+    config_validation as cv,
+    device_registry as dr,
+    entity_registry as er,
+)
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import (
@@ -40,6 +44,7 @@ PLATFORMS: list[Platform] = [
     Platform.NUMBER,
     Platform.BUTTON,
     Platform.IMAGE,
+    Platform.SWITCH,
 ]
 
 SERVICE_VIBRATE_SCHEMA = vol.Schema(
@@ -123,6 +128,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = wand
 
+    # Clean up legacy battery sensor entity (Kano Wand hardware uses 2x AAA batteries
+    # without a fuel gauge IC and always reports 0% on its battery characteristic)
+    ent_reg = er.async_get(hass)
+    if old_batt_entity_id := ent_reg.async_get_entity_id(
+        Platform.SENSOR, DOMAIN, f"{entry.entry_id}_battery"
+    ):
+        ent_reg.async_remove(old_batt_entity_id)
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     @callback
@@ -131,7 +144,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         change: bluetooth.BluetoothChange,
     ) -> None:
         """Reconnect automatically when the wand wakes up in range of any proxy."""
-        if not wand.is_connected:
+        if wand.auto_connect and not wand.is_connected:
             _LOGGER.debug(
                 "Advertisement received for %s via %s (RSSI %s); scheduling connection",
                 address,
@@ -154,7 +167,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     # Attempt an initial connection in the background if the wand is already awake
-    if _get_ble_device() is not None:
+    if wand.auto_connect and _get_ble_device() is not None:
         entry.async_create_background_task(
             hass,
             wand.ensure_connected(),

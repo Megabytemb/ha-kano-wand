@@ -37,8 +37,7 @@ class KanoWandSpellImage(KanoWandBaseEntity, ImageEntity):
         self, hass: HomeAssistant, entry: ConfigEntry, wand: KanoWand
     ) -> None:
         """Initialize the image entity."""
-        KanoWandBaseEntity.__init__(self, entry, wand)
-        ImageEntity.__init__(self, hass)
+        super().__init__(entry, wand, hass)
         self._attr_unique_id = f"{entry.entry_id}_last_spell_drawing"
         self._attr_image_last_updated = dt_util.utcnow()
         self._cached_png: bytes = render_spell_png(None)
@@ -58,6 +57,7 @@ class KanoWandSpellImage(KanoWandBaseEntity, ImageEntity):
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to spell dispatcher updates."""
+        await super().async_added_to_hass()
         self.async_on_remove(
             async_dispatcher_connect(
                 self.hass,

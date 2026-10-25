@@ -18,8 +18,8 @@ A custom Home Assistant integration for the **Kano Coding Wand**, built on Home 
 - **Sleep-Friendly Lifecycle**: Setup succeeds even while the wand is powered off in a drawer. The integration passively listens for the wand's wake-up advertisement and connects in the background within seconds of pressing the wand button.
 - **Dynamic Keep-Alive Timeout Slider**: Configurable slider (`number.kano_wand_keep_alive_timeout`, `0`–`30` minutes) controls how long Home Assistant keeps the wand awake after your last button press before letting it power down and freeing the ESP32 proxy connection slot.
 - **High-Frequency GATT Stream Isolation**: Quaternion orientation notifications (`~50 Hz`) are buffered and processed purely in memory while the wand button is held down, avoiding Home Assistant State Machine and Recorder database bloat.
-- **Local TFLite Spell Recognition**: Recognizes 25 Harry Potter spells on-device using `ai-edge-litert` / `tflite`, loaded asynchronously in an executor thread so the Home Assistant event loop is never blocked.
-- **Full Hardware Control**: Control the wand's onboard RGB tip LED (`light.kano_wand_led`) and trigger 7 haptic vibration patterns (`button.kano_wand_vibrate` and `kano_wand.vibrate`).
+- **Local Neural Network Spell Recognition**: Recognizes 25 Harry Potter spells on-device using pure-NumPy inference over the embedded TFLite model weights, loaded asynchronously in an executor thread so the Home Assistant event loop is never blocked.
+- **Full Hardware Control**: Control the wand's onboard RGB tip LED (`light.kano_wand_led`), trigger 7 haptic vibration patterns (`button.kano_wand_vibrate` and `kano_wand.vibrate`), and pause Home Assistant connections at any time with the **Auto Connect** switch (`switch.kano_wand_auto_connect`).
 
 ---
 
@@ -46,11 +46,11 @@ A custom Home Assistant integration for the **Kano Coding Wand**, built on Home 
 | `event` | `event.kano_wand_spell` | **Spell** | Stateless event entity that triggers on every recognized spell (plus `"recentre"` on a short `<0.2s` button tap). Fires reliably even when casting the exact same spell twice in a row. Attributes: `score`, `duration`, `points`. |
 | `image` | `image.kano_wand_last_spell_drawing` | **Last Spell Drawing** | Poster-styled PNG diagram of the last wand motion path (with start dot, glowing golden trail, directional arrowhead, spell name, score, duration, and sample count) for easy debugging on dashboards. |
 | `sensor` | `sensor.kano_wand_last_spell` | **Last Spell** | Displays the most recently recognized spell name on dashboards. Attributes: `score`, `duration`, `points`. |
-| `sensor` | `sensor.kano_wand_battery` | **Battery** | Wand battery level (`%`). |
 | `binary_sensor` | `binary_sensor.kano_wand_button` | **Button** | `on` while the wand button is held down; `off` when released. |
 | `binary_sensor` | `binary_sensor.kano_wand_connected` | **Connected** | Diagnostic connectivity sensor (`on` when actively connected to a BLE proxy/adapter). |
 | `light` | `light.kano_wand_led` | **LED** | RGB light controlling the LED on the tip of the wand (`ColorMode.RGB`). |
 | `number` | `number.kano_wand_keep_alive_timeout` | **Keep Alive Timeout** | Configuration slider (`0.0`–`30.0` min, step `0.5` min, default `3.0` min) controlling how long the wand stays awake after activity. Persisted across restarts. |
+| `switch` | `switch.kano_wand_auto_connect` | **Auto Connect** | Configuration switch (default `on`). Turn `off` to immediately disconnect Home Assistant from the wand and pause automatic BLE reconnection (e.g., for local PC testing). Persisted across restarts. |
 | `button` | `button.kano_wand_vibrate` | **Vibrate** | Triggers a regular haptic vibration pulse on the wand. |
 
 ---
@@ -208,9 +208,10 @@ uv run python tests/live_ble_test.py
 │       ├── light.py              # RGB565 Wand Tip LED LightEntity
 │       ├── manifest.json         # HA integration manifest & BLE matchers
 │       ├── number.py             # Keep Alive Timeout slider (RestoreNumber)
-│       ├── sensor.py             # Last Spell & Battery sensors
+│       ├── sensor.py             # Last Spell sensor
 │       ├── services.yaml         # Service definitions for UI
 │       ├── strings.json          # UI strings
+│       ├── switch.py             # Auto Connect switch (RestoreEntity)
 │       └── wand.py               # KanoWand BLE client (bleak-retry-connector)
 ├── tests/
 │   ├── conftest.py               # Shared pytest fixtures & HA test stubs

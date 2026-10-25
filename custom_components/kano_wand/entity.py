@@ -1,6 +1,8 @@
 """Base entity for the Kano Wand integration."""
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ADDRESS
 from homeassistant.helpers import device_registry as dr
@@ -17,9 +19,11 @@ class KanoWandBaseEntity(Entity):
     _attr_has_entity_name = True
     _attr_should_poll = False
 
-    def __init__(self, entry: ConfigEntry, wand: KanoWand) -> None:
+    def __init__(
+        self, entry: ConfigEntry, wand: KanoWand, *args: Any, **kwargs: Any
+    ) -> None:
         """Initialize the base entity."""
-        super().__init__()
+        super().__init__(*args, **kwargs)
         self.entry = entry
         self.wand = wand
         address = entry.data[CONF_ADDRESS]

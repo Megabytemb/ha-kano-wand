@@ -21,7 +21,6 @@ from custom_components.kano_wand.const import (
 
 EXPECTED_ENTITY_IDS = {
     "entry_123_last_spell",
-    "entry_123_battery",
     "entry_123_button",
     "entry_123_connected",
     "entry_123_spell_event",
@@ -29,14 +28,21 @@ EXPECTED_ENTITY_IDS = {
     "entry_123_keep_alive_timeout",
     "entry_123_vibrate",
     "entry_123_last_spell_drawing",
+    "entry_123_auto_connect",
 }
 
 
 async def test_setup_while_wand_asleep_and_unload(hass, config_entry) -> None:
-    """Verify async_setup_entry succeeds when wand is asleep and registers all 9 entities."""
+    """Verify async_setup_entry succeeds when wand is asleep, cleans up legacy battery, and registers all 9 entities."""
+    mock_er = MagicMock()
+    mock_er.async_get_entity_id.return_value = "sensor.kano_wand_battery"
+    hass._entity_registry = mock_er
+
     assert await async_setup_entry(hass, config_entry) is True
+    mock_er.async_remove.assert_called_once_with("sensor.kano_wand_battery")
     assert set(hass.entities.keys()) == EXPECTED_ENTITY_IDS
     assert hass.entities["entry_123_connected"].is_on is False
+    assert hass.entities["entry_123_auto_connect"].is_on is True
 
     assert await async_unload_entry(hass, config_entry) is True
     assert config_entry.entry_id not in hass.data[DOMAIN]
@@ -45,7 +51,7 @@ async def test_setup_while_wand_asleep_and_unload(hass, config_entry) -> None:
 async def test_ble_proxy_advertisement_connects_and_vibrates(
     hass, config_entry, fake_ble_client, fake_ble_device
 ) -> None:
-    """Verify BLE advertisement triggers connection, burst welcome vibrate, and battery read."""
+    """Verify BLE advertisement triggers connection, burst welcome vibrate, and auto_connect switch."""
     await async_setup_entry(hass, config_entry)
     hass.ble_device = fake_ble_device
 
@@ -74,7 +80,6 @@ async def test_ble_proxy_advertisement_connects_and_vibrates(
 
         assert mock_establish.await_count == 1
         assert hass.entities["entry_123_connected"].is_on is True
-        assert hass.entities["entry_123_battery"].native_value == 87
 
         vibrate_calls = [
             c
@@ -82,6 +87,24 @@ async def test_ble_proxy_advertisement_connects_and_vibrates(
             if c.args[0] == CHAR_VIBRATOR and c.args[1] == bytearray([3])
         ]
         assert len(vibrate_calls) == 1
+
+        # Turning off Auto Connect disconnects the wand and blocks advertisement reconnects
+        auto_connect_switch = hass.entities["entry_123_auto_connect"]
+        await auto_connect_switch.async_turn_off()
+        assert auto_connect_switch.is_on is False
+        assert wand.auto_connect is False
+        assert hass.entities["entry_123_connected"].is_on is False
+
+        for cb in hass.ble_callbacks:
+            cb(service_info, BluetoothChange.ADVERTISEMENT)
+        assert mock_establish.await_count == 1
+
+        # Turning Auto Connect back on reconnects immediately
+        await auto_connect_switch.async_turn_on()
+        assert auto_connect_switch.is_on is True
+        assert wand.auto_connect is True
+        assert mock_establish.await_count == 2
+        assert hass.entities["entry_123_connected"].is_on is True
 
     await async_unload_entry(hass, config_entry)
 
