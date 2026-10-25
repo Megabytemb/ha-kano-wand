@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Run Release Please
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@v5
         id: release
         with:
           config-file: release-please-config.json
@@ -24,7 +24,7 @@ jobs:
 
       - name: Checkout release tag
         if: ${{ steps.release.outputs.release_created == 'true' }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ steps.release.outputs.tag_name }}
 
