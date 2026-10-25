@@ -74,9 +74,10 @@ SPELLS: list[str] = [
     "not a Spell",
 ]
 
+NOT_A_SPELL = "not a Spell"
 EVENT_TYPE_RECENTRE = "recentre"
-SPELL_EVENT_TYPES: list[str] = [*SPELLS, EVENT_TYPE_RECENTRE]
-REAL_SPELLS: list[str] = [s for s in SPELLS if s != "not a Spell"]
+REAL_SPELLS: list[str] = [s for s in SPELLS if s != NOT_A_SPELL]
+SPELL_EVENT_TYPES: list[str] = [*REAL_SPELLS, EVENT_TYPE_RECENTRE]
 
 # Keep-alive timeout configuration (in minutes)
 DEFAULT_KEEP_ALIVE_TIMEOUT_MINUTES = 3.0
@@ -88,7 +89,6 @@ KEEP_ALIVE_INTERVAL_SECONDS = 10.0
 # Dispatcher signals
 SIGNAL_WAND_BUTTON = "kano_wand_button_{}"
 SIGNAL_WAND_SPELL = "kano_wand_spell_{}"
-SIGNAL_WAND_BATTERY = "kano_wand_battery_{}"
 SIGNAL_WAND_CONNECTED = "kano_wand_connected_{}"
 SIGNAL_WAND_LED = "kano_wand_led_{}"
 

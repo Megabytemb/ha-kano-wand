@@ -23,7 +23,6 @@ from .const import (
     ATTR_PATTERN,
     DOMAIN,
     SERVICE_VIBRATE,
-    SIGNAL_WAND_BATTERY,
     SIGNAL_WAND_BUTTON,
     SIGNAL_WAND_CONNECTED,
     SIGNAL_WAND_LED,
@@ -103,12 +102,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
     @callback
-    def _on_battery(batt: int) -> None:
-        async_dispatcher_send(
-            hass, SIGNAL_WAND_BATTERY.format(entry.entry_id), batt
-        )
-
-    @callback
     def _on_connected(connected: bool) -> None:
         if not connected:
             _clear_ble_advertisement_history(address)
@@ -125,7 +118,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     @callback
     def _on_device_info(sw_version: str | None, hw_version: str | None) -> None:
         dev_reg = dr.async_get(hass)
-        if device := dev_reg.async_get_device(identifiers={(DOMAIN, address)}):
+        if device := dev_reg.async_get_device(identifiers={(DOMAIN, entry.entry_id)}):
             dev_reg.async_update_device(
                 device.id,
                 sw_version=sw_version,
@@ -143,7 +136,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         name=entry.title or f"Kano Wand ({address})",
         on_button=_on_button,
         on_spell=_on_spell,
-        on_battery=_on_battery,
         on_connected=_on_connected,
         on_led=_on_led,
         on_device_info=_on_device_info,

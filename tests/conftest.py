@@ -571,16 +571,12 @@ def config_entry():
 
 @pytest.fixture
 def fake_ble_client():
-    """Create a mocked BleakClient with battery read support."""
-    from custom_components.kano_wand.const import CHAR_BATTERY
-
+    """Create a mocked BleakClient."""
     client = MagicMock()
     client.is_connected = True
     client.start_notify = AsyncMock()
     client.write_gatt_char = AsyncMock()
-    client.read_gatt_char = AsyncMock(
-        side_effect=lambda uuid: bytearray([87]) if uuid == CHAR_BATTERY else b"1.2.3"
-    )
+    client.read_gatt_char = AsyncMock(return_value=b"1.0.4")
     client.disconnect = AsyncMock()
     return client
 

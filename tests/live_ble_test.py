@@ -90,7 +90,6 @@ async def run_dry_test() -> int:
         name="Kano-Wand-Test",
         on_button=lambda b: events.append(("button", b)),
         on_spell=lambda s: events.append(("spell", s)),
-        on_battery=lambda b: events.append(("battery", b)),
         on_connected=lambda c: events.append(("connected", c)),
         on_led=lambda on, rgb: events.append(("led", (on, rgb))),
         gesture_spells=gs,
@@ -138,9 +137,6 @@ async def run_live_ble_test(
         else:
             # Wake up scanner loop to listen for next wake-up advertisement
             found_event.set()
-
-    def on_battery(batt: int) -> None:
-        print(f"[HA Entity] sensor.kano_wand_battery -> {batt}%")
 
     def on_button(pressed: bool) -> None:
         state_str = "ON (holding button - recording spell...)" if pressed else "OFF"
@@ -206,7 +202,6 @@ async def run_live_ble_test(
         name="Kano Wand",
         on_button=on_button,
         on_spell=on_spell,
-        on_battery=on_battery,
         on_connected=on_connected,
         on_led=on_led,
         gesture_spells=gs,

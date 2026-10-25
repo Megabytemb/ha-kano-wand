@@ -13,7 +13,6 @@ from bleak.exc import BleakError
 from bleak_retry_connector import BleakClientWithServiceCache, establish_connection
 
 from .const import (
-    CHAR_BATTERY,
     CHAR_BUTTON,
     CHAR_HARDWARE,
     CHAR_KEEP_ALIVE,
@@ -26,6 +25,7 @@ from .const import (
     DEFAULT_KEEP_ALIVE_TIMEOUT_MINUTES,
     EVENT_TYPE_RECENTRE,
     KEEP_ALIVE_INTERVAL_SECONDS,
+    NOT_A_SPELL,
     VIBRATION_BURST,
     VIBRATION_PATTERNS,
     VIBRATION_REGULAR,
@@ -50,7 +50,6 @@ class KanoWand:
         name: str = "Kano Wand",
         on_button: Callable[[bool], None] | None = None,
         on_spell: Callable[[dict[str, Any]], None] | None = None,
-        on_battery: Callable[[int], None] | None = None,
         on_connected: Callable[[bool], None] | None = None,
         on_led: Callable[[bool, tuple[int, int, int]], None] | None = None,
         on_device_info: Callable[[str | None, str | None], None] | None = None,
@@ -62,7 +61,6 @@ class KanoWand:
         self.name = name
         self.on_button_cb = on_button
         self.on_spell_cb = on_spell
-        self.on_battery_cb = on_battery
         self.on_connected_cb = on_connected
         self.on_led_cb = on_led
         self.on_device_info_cb = on_device_info
@@ -96,7 +94,6 @@ class KanoWand:
         # LED & Device Info state
         self.led_on: bool = False
         self.led_rgb: tuple[int, int, int] = (148, 0, 211)  # Default magic purple
-        self.battery_level: int | None = None
         self.hardware_version: str | None = None
         self.software_version: str | None = None
         self.organization: str | None = None
@@ -234,11 +231,8 @@ class KanoWand:
         """Subscribe to essential notifications with minimal GATT round-trips."""
         assert self.client is not None
 
-        # Subscribe to button, motion, and battery notifications.
-        # Subscribing to CHAR_BATTERY automatically triggers an initial battery notification.
         await self.client.start_notify(CHAR_BUTTON, self._on_button_notification)
         await self.client.start_notify(CHAR_QUATERNIONS, self._on_motion_notification)
-        await self.client.start_notify(CHAR_BATTERY, self._on_battery_notification)
         await self.reset_position()
 
     async def _post_connect_tasks(self) -> None:
@@ -247,12 +241,6 @@ class KanoWand:
             if self.vibrate_on_connect and self.is_connected:
                 await self.set_led(True, self.led_rgb)
                 await self.vibrate(VIBRATION_BURST)
-
-            if self.battery_level is None and self.client and self.is_connected:
-                with contextlib.suppress(Exception):
-                    batt_bytes = await self.client.read_gatt_char(CHAR_BATTERY)
-                    if batt_bytes:
-                        self._on_battery_notification(None, bytearray(batt_bytes))
 
             if self.software_version is None and self.client and self.is_connected:
                 with contextlib.suppress(Exception):
@@ -441,8 +429,11 @@ class KanoWand:
                 try:
                     cleaned_positions = self.gs.clean_trajectory(flipped_positions)
                     spell_data = self.gs.recognise(cleaned_positions)
+                    spell_name = spell_data.get("spell")
                     score_pct = float(spell_data.get("score") or 0.0) * 100.0
-                    if score_pct >= self.min_spell_confidence:
+                    if spell_name == NOT_A_SPELL:
+                        _LOGGER.debug("%s: Gesture classified as non-spell noise", self.name)
+                    elif score_pct >= self.min_spell_confidence:
                         spell_data["duration"] = round(seconds, 3)
                         spell_data["points"] = len(cleaned_positions)
                         spell_data["positions"] = cleaned_positions
@@ -457,7 +448,7 @@ class KanoWand:
                         _LOGGER.debug(
                             "%s: Ignoring spell %s (confidence %.1f%% < minimum %.1f%%)",
                             self.name,
-                            spell_data.get("spell"),
+                            spell_name,
                             score_pct,
                             self.min_spell_confidence,
                         )
@@ -496,16 +487,6 @@ class KanoWand:
 
         pos = self.conversion.position([x, y, z, w])
         self.current_spell.append([pos["x"], pos["y"]])
-
-    def _on_battery_notification(self, sender: Any, data: bytearray) -> None:
-        """Handle battery level GATT notifications."""
-        if not data:
-            return
-        batt = int(data[0])
-        if batt != self.battery_level:
-            self.battery_level = batt
-            if self.on_battery_cb:
-                self.on_battery_cb(batt)
 
     @staticmethod
     def _flip_cord(coords: list[float]) -> list[float]:
