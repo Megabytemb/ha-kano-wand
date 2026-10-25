@@ -11,9 +11,13 @@
       "connectable": true
     }
   ],
-  "codeowners": ["@Megabytemb"],
+  "codeowners": [
+    "@Megabytemb"
+  ],
   "config_flow": true,
-  "dependencies": ["bluetooth"],
+  "dependencies": [
+    "bluetooth"
+  ],
   "documentation": "https://github.com/Megabytemb/ha-kano-wand",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/Megabytemb/ha-kano-wand/issues",
