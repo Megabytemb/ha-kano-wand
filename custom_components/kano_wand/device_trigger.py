@@ -1,4 +1,4 @@
-"""Provides device triggers for Kano Wand."""
+"""Provides device triggers for Kano Wand via internal dispatcher signals."""
 from __future__ import annotations
 
 from typing import Any
@@ -6,25 +6,25 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.components.device_automation import DEVICE_TRIGGER_BASE_SCHEMA
-from homeassistant.components.homeassistant.triggers import event as event_trigger
 from homeassistant.const import (
-    ATTR_DEVICE_ID,
     CONF_DEVICE_ID,
     CONF_DOMAIN,
-    CONF_EVENT,
     CONF_PLATFORM,
     CONF_TYPE,
 )
-from homeassistant.core import CALLBACK_TYPE, HomeAssistant
+from homeassistant.core import CALLBACK_TYPE, HassJob, HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.trigger import TriggerActionType, TriggerInfo
 from homeassistant.helpers.typing import ConfigType
 
 from .const import (
     DOMAIN,
-    EVENT_KANO_WAND_SPELL,
-    EVENT_KANO_WAND_STATUS,
     EVENT_TYPE_RECENTRE,
     REAL_SPELLS,
+    SIGNAL_WAND_BUTTON,
+    SIGNAL_WAND_CONNECTED,
+    SIGNAL_WAND_SPELL,
 )
 
 CONF_SUBTYPE = "subtype"
@@ -46,13 +46,6 @@ SIMPLE_TRIGGER_TYPES: list[str] = [
     TRIGGER_TYPE_DISCONNECTED,
 ]
 
-STATUS_TRIGGER_TYPES: set[str] = {
-    TRIGGER_TYPE_BUTTON_PRESSED,
-    TRIGGER_TYPE_BUTTON_RELEASED,
-    TRIGGER_TYPE_CONNECTED,
-    TRIGGER_TYPE_DISCONNECTED,
-}
-
 TRIGGER_SCHEMA = vol.Any(
     DEVICE_TRIGGER_BASE_SCHEMA.extend(
         {
@@ -66,6 +59,14 @@ TRIGGER_SCHEMA = vol.Any(
         }
     ),
 )
+
+
+def _get_entry_ids_for_device(hass: HomeAssistant, device_id: str) -> list[str]:
+    """Return config entry IDs belonging to the given Home Assistant device_id."""
+    dev_reg = dr.async_get(hass)
+    if device := dev_reg.async_get(device_id):
+        return list(device.config_entries)
+    return list(hass.data.get(DOMAIN, {}).keys())
 
 
 async def async_get_triggers(
@@ -98,46 +99,115 @@ async def async_attach_trigger(
     action: TriggerActionType,
     trigger_info: TriggerInfo,
 ) -> CALLBACK_TYPE:
-    """Attach a Kano Wand device trigger."""
+    """Attach a Kano Wand device trigger using internal dispatcher signals."""
     trigger_type: str = config[CONF_TYPE]
+    subtype: str | None = config.get(CONF_SUBTYPE)
     device_id: str = config[CONF_DEVICE_ID]
-
-    if trigger_type == TRIGGER_TYPE_SPELL_CAST:
-        event_type = EVENT_KANO_WAND_SPELL
-        event_data: dict[str, Any] = {
-            ATTR_DEVICE_ID: device_id,
-            "spell": config[CONF_SUBTYPE],
-        }
-    elif trigger_type == TRIGGER_TYPE_ANY_SPELL:
-        event_type = EVENT_KANO_WAND_SPELL
-        event_data = {
-            ATTR_DEVICE_ID: device_id,
-            "is_spell": True,
-        }
-    elif trigger_type == TRIGGER_TYPE_RECENTRE:
-        event_type = EVENT_KANO_WAND_SPELL
-        event_data = {
-            ATTR_DEVICE_ID: device_id,
-            "spell": EVENT_TYPE_RECENTRE,
-        }
-    else:
-        event_type = EVENT_KANO_WAND_STATUS
-        event_data = {
-            ATTR_DEVICE_ID: device_id,
-            "type": trigger_type,
-        }
-
-    event_config = event_trigger.TRIGGER_SCHEMA(
-        {
-            event_trigger.CONF_PLATFORM: CONF_EVENT,
-            event_trigger.CONF_EVENT_TYPE: event_type,
-            event_trigger.CONF_EVENT_DATA: event_data,
-        }
+    trigger_data: dict[str, Any] = (
+        trigger_info.get("trigger_data", {}) if trigger_info else {}
     )
-    return await event_trigger.async_attach_trigger(
-        hass,
-        event_config,
-        action,
-        trigger_info,
-        platform_type="device",
-    )
+    job = HassJob(action)
+    entry_ids = _get_entry_ids_for_device(hass, device_id)
+    unsubs: list[CALLBACK_TYPE] = []
+
+    base_payload: dict[str, Any] = {
+        **trigger_data,
+        "platform": "device",
+        "domain": DOMAIN,
+        "device_id": device_id,
+        "type": trigger_type,
+        "subtype": subtype,
+    }
+
+    if trigger_type in (
+        TRIGGER_TYPE_SPELL_CAST,
+        TRIGGER_TYPE_ANY_SPELL,
+        TRIGGER_TYPE_RECENTRE,
+    ):
+
+        @callback
+        def _handle_spell(spell_data: dict[str, Any]) -> None:
+            spell = spell_data.get("spell")
+            if trigger_type == TRIGGER_TYPE_SPELL_CAST and spell != subtype:
+                return
+            if trigger_type == TRIGGER_TYPE_ANY_SPELL and (
+                not spell or spell == EVENT_TYPE_RECENTRE
+            ):
+                return
+            if trigger_type == TRIGGER_TYPE_RECENTRE and spell != EVENT_TYPE_RECENTRE:
+                return
+
+            hass.async_run_hass_job(
+                job,
+                {
+                    "trigger": {
+                        **base_payload,
+                        "spell": spell,
+                        "score": spell_data.get("score"),
+                        "duration": spell_data.get("duration"),
+                        "points": spell_data.get("points"),
+                        "description": f"Kano Wand spell: {spell}",
+                    }
+                },
+            )
+
+        for entry_id in entry_ids:
+            unsubs.append(
+                async_dispatcher_connect(
+                    hass, SIGNAL_WAND_SPELL.format(entry_id), _handle_spell
+                )
+            )
+
+    elif trigger_type in (TRIGGER_TYPE_BUTTON_PRESSED, TRIGGER_TYPE_BUTTON_RELEASED):
+        expected_pressed = trigger_type == TRIGGER_TYPE_BUTTON_PRESSED
+
+        @callback
+        def _handle_button(pressed: bool) -> None:
+            if pressed == expected_pressed:
+                hass.async_run_hass_job(
+                    job,
+                    {
+                        "trigger": {
+                            **base_payload,
+                            "description": f"Kano Wand {trigger_type}",
+                        }
+                    },
+                )
+
+        for entry_id in entry_ids:
+            unsubs.append(
+                async_dispatcher_connect(
+                    hass, SIGNAL_WAND_BUTTON.format(entry_id), _handle_button
+                )
+            )
+
+    elif trigger_type in (TRIGGER_TYPE_CONNECTED, TRIGGER_TYPE_DISCONNECTED):
+        expected_connected = trigger_type == TRIGGER_TYPE_CONNECTED
+
+        @callback
+        def _handle_connected(connected: bool) -> None:
+            if connected == expected_connected:
+                hass.async_run_hass_job(
+                    job,
+                    {
+                        "trigger": {
+                            **base_payload,
+                            "description": f"Kano Wand {trigger_type}",
+                        }
+                    },
+                )
+
+        for entry_id in entry_ids:
+            unsubs.append(
+                async_dispatcher_connect(
+                    hass, SIGNAL_WAND_CONNECTED.format(entry_id), _handle_connected
+                )
+            )
+
+    @callback
+    def _async_remove() -> None:
+        for unsub in unsubs:
+            unsub()
+        unsubs.clear()
+
+    return _async_remove

@@ -149,7 +149,17 @@ def _install_ha_stubs() -> None:
         async def async_add_executor_job(self, func: Callable, *args: Any) -> Any:
             return func(*args)
 
+        def async_run_hass_job(self, job: Any, *args: Any) -> None:
+            res = job.target(*args)
+            if asyncio.iscoroutine(res):
+                asyncio.create_task(res)
+
+    class HassJob:
+        def __init__(self, target: Callable) -> None:
+            self.target = target
+
     core.HomeAssistant = FakeHomeAssistant
+    core.HassJob = HassJob
     core.ServiceCall = Any
     core.Context = Any
     core.Event = Any

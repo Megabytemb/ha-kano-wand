@@ -92,10 +92,6 @@ SIGNAL_WAND_BATTERY = "kano_wand_battery_{}"
 SIGNAL_WAND_CONNECTED = "kano_wand_connected_{}"
 SIGNAL_WAND_LED = "kano_wand_led_{}"
 
-# Home Assistant Event Bus events
-EVENT_KANO_WAND_SPELL = "kano_wand_spell"
-EVENT_KANO_WAND_STATUS = "kano_wand_status"
-
 # Services
 SERVICE_VIBRATE = "vibrate"
 ATTR_PATTERN = "pattern"

@@ -159,25 +159,6 @@ actions:
       pattern: short
 ```
 
-### 3. Triggering via the `kano_wand_spell` Event Bus Event
-Every spell also fires a `kano_wand_spell` event directly on the Home Assistant event bus:
-
-```yaml
-alias: "Kano Wand - Aguamenti Backyard Sprinklers"
-triggers:
-  - trigger: event
-    event_type: kano_wand_spell
-    event_data:
-      spell: "Aguamenti"
-conditions:
-  - condition: template
-    value_template: "{{ trigger.event.data.score | float(0) > 0.70 }}"
-actions:
-  - action: kano_wand.vibrate
-    data:
-      pattern: burst
-```
-
 ---
 
 ## 🧪 Local Development & Live BLE Testing

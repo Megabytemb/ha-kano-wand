@@ -1,4 +1,4 @@
-"""Tests for Kano Wand device triggers, actions, conditions, and logbook integration."""
+"""Tests for Kano Wand device triggers, actions, and conditions."""
 from __future__ import annotations
 
 import types
@@ -10,8 +10,6 @@ from custom_components.kano_wand.const import (
     CHAR_QUATERNIONS_RESET,
     CHAR_VIBRATOR,
     DOMAIN,
-    EVENT_KANO_WAND_SPELL,
-    EVENT_KANO_WAND_STATUS,
     REAL_SPELLS,
 )
 from custom_components.kano_wand.device_action import (
@@ -26,27 +24,28 @@ from custom_components.kano_wand.device_trigger import (
     async_attach_trigger,
     async_get_triggers,
 )
-from custom_components.kano_wand.logbook import async_describe_events
 
 
-async def test_device_triggers_list_and_attach(hass) -> None:
-    """Verify all 31 device triggers (6 general + 25 individual spells) are exposed and attach cleanly."""
+async def test_device_triggers_list_and_fire(hass, config_entry) -> None:
+    """Verify all 31 device triggers attach via internal dispatcher signals with zero event bus spam."""
+    mock_dr = MagicMock()
+    mock_dr.async_get.return_value = types.SimpleNamespace(
+        id="dev_wand_1", config_entries=[config_entry.entry_id]
+    )
+    hass._device_registry = mock_dr
+
+    await async_setup_entry(hass, config_entry)
+    wand = hass.data[DOMAIN][config_entry.entry_id]
+
     triggers = await async_get_triggers(hass, "dev_wand_1")
     assert len(triggers) == 6 + len(REAL_SPELLS) == 31
+    assert [t["subtype"] for t in triggers if t["type"] == "spell_cast"] == REAL_SPELLS
 
-    spell_subtypes = [
-        t["subtype"] for t in triggers if t["type"] == "spell_cast"
-    ]
-    assert spell_subtypes == REAL_SPELLS
+    fired_lumos: list[dict] = []
+    fired_any_spell: list[dict] = []
+    fired_button: list[dict] = []
 
-    from homeassistant.components.homeassistant.triggers import event as event_trigger
-
-    event_trigger.async_attach_trigger.reset_mock()
-    action = AsyncMock()
-    trigger_info = {"trigger_id": "test"}
-
-    # 1. Specific spell trigger ("Lumos")
-    await async_attach_trigger(
+    unsub_lumos = await async_attach_trigger(
         hass,
         {
             "platform": "device",
@@ -55,18 +54,10 @@ async def test_device_triggers_list_and_attach(hass) -> None:
             "type": "spell_cast",
             "subtype": "Lumos",
         },
-        action,
-        trigger_info,
+        lambda payload: fired_lumos.append(payload),
+        {"trigger_data": {"id": "lumos_trig"}},
     )
-    attached_cfg = event_trigger.async_attach_trigger.call_args.args[1]
-    assert attached_cfg["event_type"] == EVENT_KANO_WAND_SPELL
-    assert attached_cfg["event_data"] == {
-        "device_id": "dev_wand_1",
-        "spell": "Lumos",
-    }
-
-    # 2. Any spell trigger
-    await async_attach_trigger(
+    unsub_any = await async_attach_trigger(
         hass,
         {
             "platform": "device",
@@ -74,18 +65,10 @@ async def test_device_triggers_list_and_attach(hass) -> None:
             "device_id": "dev_wand_1",
             "type": "any_spell",
         },
-        action,
-        trigger_info,
+        lambda payload: fired_any_spell.append(payload),
+        {"trigger_data": {"id": "any_trig"}},
     )
-    attached_cfg = event_trigger.async_attach_trigger.call_args.args[1]
-    assert attached_cfg["event_type"] == EVENT_KANO_WAND_SPELL
-    assert attached_cfg["event_data"] == {
-        "device_id": "dev_wand_1",
-        "is_spell": True,
-    }
-
-    # 3. Button pressed status trigger
-    await async_attach_trigger(
+    unsub_btn = await async_attach_trigger(
         hass,
         {
             "platform": "device",
@@ -93,15 +76,35 @@ async def test_device_triggers_list_and_attach(hass) -> None:
             "device_id": "dev_wand_1",
             "type": "button_pressed",
         },
-        action,
-        trigger_info,
+        lambda payload: fired_button.append(payload),
+        {"trigger_data": {"id": "btn_trig"}},
     )
-    attached_cfg = event_trigger.async_attach_trigger.call_args.args[1]
-    assert attached_cfg["event_type"] == EVENT_KANO_WAND_STATUS
-    assert attached_cfg["event_data"] == {
-        "device_id": "dev_wand_1",
-        "type": "button_pressed",
-    }
+
+    # Casting Lumos twice in a row fires both times
+    wand.on_spell_cb({"spell": "Lumos", "score": 0.96, "duration": 0.8, "points": 28})
+    wand.on_spell_cb({"spell": "Lumos", "score": 0.91, "duration": 0.7, "points": 25})
+    assert len(fired_lumos) == 2
+    assert fired_lumos[0]["trigger"]["spell"] == "Lumos"
+    assert fired_lumos[0]["trigger"]["score"] == 0.96
+    assert len(fired_any_spell) == 2
+
+    # Short-click recentre does NOT fire any_spell or spell_cast: Lumos
+    wand.on_spell_cb({"spell": "recentre", "score": 1.0, "duration": 0.08, "points": 0})
+    assert len(fired_lumos) == 2
+    assert len(fired_any_spell) == 2
+
+    # Button press fires button_pressed trigger
+    wand.on_button_cb(True)
+    wand.on_button_cb(False)
+    assert len(fired_button) == 1
+
+    # No custom events were dumped onto hass.bus
+    assert len(hass.bus.events) == 0
+
+    unsub_lumos()
+    unsub_any()
+    unsub_btn()
+    await async_unload_entry(hass, config_entry)
 
 
 async def test_device_actions_and_conditions(
@@ -149,7 +152,6 @@ async def test_device_actions_and_conditions(
         wand.button_pressed = True
         assert is_btn_fn(hass, None) is True
 
-        # Device actions: vibrate_burst, led_turn_on, led_turn_off, recentre, disconnect
         fake_ble_client.write_gatt_char.reset_mock()
         await async_call_action_from_config(
             hass,
@@ -199,42 +201,3 @@ async def test_device_actions_and_conditions(
         assert wand.is_connected is False
 
     await async_unload_entry(hass, config_entry)
-
-
-def test_logbook_event_descriptions(hass) -> None:
-    """Verify logbook.py formats spell and recentre events for the Device Activity panel."""
-    registered: dict[tuple[str, str], Any] = {}
-
-    def _register(domain: str, event_name: str, callback_fn: Any) -> None:
-        registered[(domain, event_name)] = callback_fn
-
-    async_describe_events(hass, _register)
-    describe_fn = registered[(DOMAIN, EVENT_KANO_WAND_SPELL)]
-
-    lumos_event = types.SimpleNamespace(
-        data={
-            "device_id": "dev_wand_1",
-            "name": "Kano-Wand-75",
-            "spell": "Lumos",
-            "score": 0.962,
-        }
-    )
-    assert describe_fn(lumos_event) == {
-        "name": "Kano-Wand-75",
-        "message": "cast Lumos (96% confidence)",
-        "device_id": "dev_wand_1",
-    }
-
-    recentre_event = types.SimpleNamespace(
-        data={
-            "device_id": "dev_wand_1",
-            "name": "Kano-Wand-75",
-            "spell": "recentre",
-            "score": 1.0,
-        }
-    )
-    assert describe_fn(recentre_event) == {
-        "name": "Kano-Wand-75",
-        "message": "recentered its orientation",
-        "device_id": "dev_wand_1",
-    }
