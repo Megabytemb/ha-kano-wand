@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/Megabytemb/ha-kano-wand/compare/v1.2.0...v1.3.0) (2026-10-25)
+
+
+### Features
+
+* add visual device automations (triggers, actions, conditions) and logbook activity ([1544058](https://github.com/Megabytemb/ha-kano-wand/commit/154405868168a8746ccf53f454edb9bb307cb84b))
+
 ## [1.2.0](https://github.com/Megabytemb/ha-kano-wand/compare/v1.1.2...v1.2.0) (2026-10-25)
 
 
