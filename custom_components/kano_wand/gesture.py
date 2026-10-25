@@ -1,4 +1,4 @@
-"""Gesture and spell recognition using TFLite / LiteRT."""
+"""Gesture and spell recognition using the Kano Wand neural network model."""
 from __future__ import annotations
 
 import logging
@@ -8,25 +8,31 @@ from typing import Any
 
 import numpy as np
 
-try:
-    import ai_edge_litert.interpreter as tflite
-except ImportError:
-    try:
-        import tflite_runtime.interpreter as tflite
-    except ImportError:
-        try:
-            from tensorflow import lite as tflite
-        except ImportError:
-            import tflite
-
 from .const import SPELLS
 from .fitCurves import fitCurve
 
 _LOGGER = logging.getLogger(__name__)
 
+# FlatBuffer raw little-endian float32 tensor offsets inside model/model.tflite:
+# Layers: Dense1(80->80, ELU) -> Dense2(80->80, ReLU) -> Dense3(80->80, ReLU) -> Dense4(80->26, Softmax)
+_TFLITE_TENSOR_SPECS: dict[str, tuple[int, tuple[int, ...]]] = {
+    "W1": (856, (80, 80)),
+    "b1": (524, (80,)),
+    "W2": (26468, (80, 80)),
+    "b2": (86140, (80,)),
+    "W3": (52080, (80, 80)),
+    "b3": (86472, (80,)),
+    "W4": (77692, (26, 80)),
+    "b4": (86024, (26,)),
+}
+
 
 class GestureSpells:
-    """Recognize Kano Wand spell gestures using the Kano TFLite model."""
+    """Recognize Kano Wand spell gestures using the Kano TFLite model weights in pure NumPy.
+
+    Runs natively on all Home Assistant platforms (including Alpine Linux / musllinux
+    containers and aarch64) without requiring platform-specific C++ TFLite wheels.
+    """
 
     def __init__(self, load_immediately: bool = True) -> None:
         """Initialize the gesture recognizer."""
@@ -34,32 +40,39 @@ class GestureSpells:
         self.theSpells = sorted(SPELLS, key=lambda s: (s == "not a Spell", s))
         self.numberOfspells = len(self.theSpells)
         self.resolution = 27
-        self.interpreter: Any = None
-        self.input_details: list[dict[str, Any]] = []
-        self.output_details: list[dict[str, Any]] = []
+        self._weights: dict[str, np.ndarray] | None = None
         if load_immediately:
             self.loadModel()
 
     def loadModel(self) -> None:
-        """Load the TFLite model from disk (safe to run in an executor thread)."""
-        if self.interpreter is not None:
+        """Load the neural network weights from model/model.tflite."""
+        if self._weights is not None:
             return
         model_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "model", "model.tflite"
         )
-        self.interpreter = tflite.Interpreter(model_path=model_path)
-        self.interpreter.allocate_tensors()
-        self.input_details = self.interpreter.get_input_details()
-        self.output_details = self.interpreter.get_output_details()
-        _LOGGER.debug("Loaded Kano Wand TFLite model from %s", model_path)
+        with open(model_path, "rb") as f:
+            raw = f.read()
+
+        weights: dict[str, np.ndarray] = {}
+        for name, (offset, shape) in _TFLITE_TENSOR_SPECS.items():
+            count = math.prod(shape)
+            arr = np.frombuffer(
+                raw, dtype="<f4", count=count, offset=offset
+            ).reshape(shape).copy()
+            weights[name] = arr
+
+        self._weights = weights
+        _LOGGER.debug("Loaded Kano Wand model weights from %s", model_path)
 
     def predict(self, spellToRecognise: list) -> dict[str, Any]:
         """Run inference on normalized Bezier curve control points."""
         if not spellToRecognise:
             return {"score": 0.0, "spell": "not a Spell"}
 
-        if self.interpreter is None:
+        if self._weights is None:
             self.loadModel()
+        assert self._weights is not None
 
         spellSize = 80
         flatSp = [item for sublist in spellToRecognise for item in sublist]
@@ -68,15 +81,20 @@ class GestureSpells:
             flatSp = flatSp[:spellSize]
         pad = [0] * (spellSize - len(flatSp))
 
-        input_data = np.array([flatSp + pad], dtype=np.float32)
-        self.interpreter.set_tensor(self.input_details[0]["index"], input_data)
-        self.interpreter.invoke()
+        x = np.array(flatSp + pad, dtype=np.float32)
+        w = self._weights
 
-        p = (
-            self.interpreter.get_tensor(self.output_details[0]["index"])
-            .flatten()
-            .tolist()
-        )
+        # Layer 1: Dense(80 -> 80) + ELU
+        z1 = x @ w["W1"].T + w["b1"]
+        a1 = np.where(z1 >= 0.0, z1, np.exp(np.minimum(z1, 0.0)) - 1.0)
+        # Layer 2: Dense(80 -> 80) + ReLU
+        a2 = np.maximum(0.0, a1 @ w["W2"].T + w["b2"])
+        # Layer 3: Dense(80 -> 80) + ReLU
+        a3 = np.maximum(0.0, a2 @ w["W3"].T + w["b3"])
+        # Layer 4: Dense(80 -> 26) + Softmax
+        logits = a3 @ w["W4"].T + w["b4"]
+        exp_logits = np.exp(logits - np.max(logits))
+        p = (exp_logits / np.sum(exp_logits)).tolist()
 
         ranked = sorted(enumerate(p), key=lambda item: item[1], reverse=True)
         best_idx, max_value = ranked[0]
