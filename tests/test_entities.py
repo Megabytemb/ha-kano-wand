@@ -255,6 +255,34 @@ async def test_spell_events_sensor_image_and_quaternion_stream(
     png_bytes = await spell_image.async_image()
     assert png_bytes is not None and png_bytes.startswith(b"\x89PNG\r\n\x1a\n")
 
+    # Verify unrecognized ("not a Spell") attempt updates Last Spell Drawing
+    # WITHOUT overwriting Last Spell sensor or Event entity
+    prev_image_updated = spell_image._attr_image_last_updated
+    with patch.object(
+        wand.gs,
+        "recognise",
+        return_value={
+            "spell": "not a Spell",
+            "score": 0.91,
+            "runner_up": "Flipendo",
+            "runner_up_score": 0.38,
+            "closest_spell": "Flipendo",
+            "closest_score": 0.38,
+        },
+    ):
+        wand._on_button_notification(None, bytearray([1]))
+        wand._time_button_down -= 0.75
+        for i in range(12):
+            pkt = bytearray(struct.pack("<hhhh", int(-300 + 40 * i), int(30 * i), 1000, 0))
+            wand._on_motion_notification(None, pkt)
+        wand._on_button_notification(None, bytearray([0]))
+
+    assert spell_sensor.native_value == "Impedimenta"
+    assert spell_image.extra_state_attributes["recognized"] is False
+    assert spell_image.extra_state_attributes["status"] == "unrecognized"
+    assert spell_image.extra_state_attributes["closest_spell"] == "Flipendo"
+    assert spell_image._attr_image_last_updated >= prev_image_updated
+
     wand._on_disconnected(fake_ble_client)
     assert hass.entities["entry_123_connected"].is_on is False
     assert hass.entities["entry_123_led"].is_on is False

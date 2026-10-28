@@ -89,6 +89,7 @@ KEEP_ALIVE_INTERVAL_SECONDS = 10.0
 # Dispatcher signals
 SIGNAL_WAND_BUTTON = "kano_wand_button_{}"
 SIGNAL_WAND_SPELL = "kano_wand_spell_{}"
+SIGNAL_WAND_DRAW = "kano_wand_draw_{}"
 SIGNAL_WAND_CONNECTED = "kano_wand_connected_{}"
 SIGNAL_WAND_LED = "kano_wand_led_{}"
 

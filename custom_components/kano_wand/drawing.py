@@ -248,6 +248,14 @@ def render_spell_png(
     score = float(spell_data.get("score", 0.0))
     duration = float(spell_data.get("duration", 0.0))
     num_points = int(spell_data.get("points", len(raw_positions)))
+    recognized = bool(spell_data.get("recognized", True))
+    status = str(spell_data.get("status", "recognized"))
+    closest_spell = spell_data.get("closest_spell")
+    closest_score = float(spell_data.get("closest_score") or 0.0)
+    is_valid_spell = recognized and spell_name.lower() not in (
+        "not a spell",
+        "unknown",
+    )
 
     # Normalize points to fit cleanly inside the drawing area while preserving aspect ratio
     plot_top = 62
@@ -283,33 +291,44 @@ def render_spell_png(
         for p in raw_positions
     ]
 
-    # Draw golden trail segments with gradient from bright gold to warm bronze
+    # Draw trail segments: bright gold for recognized spells, warm coral/crimson for unrecognized attempts
     n_seg = max(1, len(mapped) - 1)
     for i in range(len(mapped) - 1):
         frac = i / n_seg
-        seg_color = (
-            int(250 - 35 * frac),
-            int(215 - 65 * frac),
-            int(115 - 35 * frac),
-        )
+        if is_valid_spell:
+            seg_color = (
+                int(250 - 35 * frac),
+                int(215 - 65 * frac),
+                int(115 - 35 * frac),
+            )
+            glow = (215, 165, 70)
+        else:
+            seg_color = (
+                int(250 - 40 * frac),
+                int(125 - 45 * frac),
+                int(105 - 35 * frac),
+            )
+            glow = (200, 75, 65)
         _draw_thick_segment(
             img,
             mapped[i],
             mapped[i + 1],
             radius=3.5,
             color=seg_color,
-            glow_color=(215, 165, 70),
+            glow_color=glow,
         )
 
     # Start dot (filled circle at Point 0, matching the Kano poster)
-    _draw_circle(img, mapped[0], radius=8.5, color=(255, 225, 130))
+    start_color = (255, 225, 130) if is_valid_spell else (255, 155, 135)
+    arrow_color = (255, 195, 95) if is_valid_spell else (250, 120, 100)
+    _draw_circle(img, mapped[0], radius=8.5, color=start_color)
     _draw_text(
         img,
         "START",
         int(mapped[0][0]),
         max(plot_top - 10, int(mapped[0][1]) - 20),
         scale=1,
-        color=(200, 185, 140),
+        color=(200, 185, 140) if is_valid_spell else (215, 150, 140),
     )
 
     # End arrowhead (look back a few samples for stable tangent direction)
@@ -325,22 +344,41 @@ def render_spell_png(
             tip=mapped[-1],
             direction=(dx, dy),
             size=18.0,
-            color=(255, 195, 95),
+            color=arrow_color,
         )
 
-    # Footer: Spell Name + Score / Duration / Samples
-    is_valid_spell = spell_name.lower() not in ("not a spell", "unknown")
-    title_color = (120, 240, 160) if is_valid_spell else (240, 130, 115)
+    # Footer: Spell Name + Score / Closest Guess / Duration / Samples
+    if is_valid_spell:
+        title_text = spell_name
+        title_color = (120, 240, 160)
+        stats_line = f"SCORE {score * 100:.0f}%  -  {duration:.2f}S  -  {num_points} PTS"
+    elif status == "too_short":
+        title_text = "TOO SHORT"
+        title_color = (245, 130, 115)
+        stats_line = f"NEED 6 PTS  -  {duration:.2f}S  -  {num_points} PTS"
+    elif status == "low_confidence":
+        title_text = f"LOW: {spell_name[:18]}"
+        title_color = (250, 185, 95)
+        stats_line = f"SCORE {score * 100:.0f}%  -  {duration:.2f}S  -  {num_points} PTS"
+    else:
+        title_text = "UNRECOGNIZED"
+        title_color = (245, 130, 115)
+        if closest_spell:
+            stats_line = (
+                f"CLOSEST: {str(closest_spell).upper()[:12]} "
+                f"{closest_score * 100:.0f}%  -  {num_points} PTS"
+            )
+        else:
+            stats_line = f"NO MATCH  -  {duration:.2f}S  -  {num_points} PTS"
+
     _draw_text(
         img,
-        spell_name,
+        title_text,
         size // 2,
         size - 66,
         scale=3,
         color=title_color,
     )
-
-    stats_line = f"SCORE {score * 100:.0f}%  -  {duration:.2f}S  -  {num_points} PTS"
     _draw_text(
         img,
         stats_line,

@@ -44,7 +44,7 @@ A custom Home Assistant integration for the **Kano Coding Wand**, built on Home 
 | Platform | Entity ID | Name | Description |
 | :--- | :--- | :--- | :--- |
 | `event` | `event.kano_wand_spell` | **Spell** | Stateless event entity that triggers on every recognized spell (plus `"recentre"` on a short `<0.2s` button tap). Fires reliably even when casting the exact same spell twice in a row. Attributes: `score`, `duration`, `points`. |
-| `image` | `image.kano_wand_last_spell_drawing` | **Last Spell Drawing** | Poster-styled PNG diagram of the last wand motion path (with start dot, glowing golden trail, directional arrowhead, spell name, score, duration, and sample count) for easy debugging on dashboards. |
+| `image` | `image.kano_wand_last_spell_drawing` | **Last Spell Drawing** | Poster-styled PNG diagram of the last wand motion path—renders **every** attempt (golden trail for recognized spells, coral-red trail with `CLOSEST: <SPELL> <PCT>%` feedback for unrecognized/practice attempts). |
 | `sensor` | `sensor.kano_wand_last_spell` | **Last Spell** | Displays the most recently recognized spell name on dashboards. Attributes: `score`, `duration`, `points`. |
 | `sensor` | `sensor.kano_wand_last_spell_confidence` | **Last Spell Confidence** | Confidence score (`%`, `0`–`100%`) of the most recently recognized spell. |
 | `binary_sensor` | `binary_sensor.kano_wand_button` | **Button** | `on` while the wand button is held down; `off` when released. |
@@ -82,33 +82,44 @@ data:
 
 ## 🪄 Recognized Spells (25 Spells + Recentre)
 
-The TFLite model recognizes the following 25 spell gestures (plus `recentre` on a quick button tap):
+The neural network model (`model.tflite`, bit-for-bit identical to the official Kano Coding App's `spelling.weights.bin`) recognizes the following **25 spell gestures** (plus `recentre` on a quick button tap):
 
-- `Accio`
-- `Aguamenti`
-- `Alohomora`
-- `Avis`
-- `Bombarda`
-- `Colovaria`
-- `Engorgio`
-- `Epoximise`
-- `Evanesco`
-- `Expelliarmus`
-- `Flipendo`
-- `Fumos`
-- `Gemino`
-- `Impedimenta`
-- `Incendio`
-- `Locomotor`
-- `Lumos`
-- `Oppugno`
-- `Orchideous`
-- `Reducio`
-- `Reducto`
-- `Reparo`
-- `Serpensortia`
-- `Vermillious`
-- `Wingardium Leviosa`
+<p align="center">
+  <img alt="All 25 Kano Wand Model Spell Motions" src="docs/spells/all_spells_guide.png" width="760">
+</p>
+
+> **Note on the physical box poster (`Stupefy` & `Incendio`)**:
+> - Although `Stupefy` was printed on the physical paper poster inside the Kano Wand box, Kano never included `Stupefy` in the official Kano app's neural network (`spelling.json` / `spelling.weights.bin`) or Blockly spell picker.
+> - On the physical poster, the triangle motion (Up → Right → Down-Left) is labeled *Incendio*, whereas in the Kano app's neural network that triangle motion is **`Oppugno`**, and **`Incendio`** is a tall narrow flame loop (Up → Down-Right → Left).
+> - Both the rendered model training shapes (`docs/spells/*.png`) and the official vector SVGs extracted from the Kano app (`docs/spells/svg/*.svg`) are included in [`docs/spells/`](docs/spells/).
+
+| Spell | Model Shape (PNG) | Official App Icon (SVG) |
+| :--- | :--- | :--- |
+| `Accio` | [`accio.png`](docs/spells/accio.png) | [`accio.svg`](docs/spells/svg/accio.svg) |
+| `Aguamenti` | [`aguamenti.png`](docs/spells/aguamenti.png) | [`aguamenti.svg`](docs/spells/svg/aguamenti.svg) |
+| `Alohomora` | [`alohomora.png`](docs/spells/alohomora.png) | [`alohomora.svg`](docs/spells/svg/alohomora.svg) |
+| `Avis` | [`avis.png`](docs/spells/avis.png) | [`avis.svg`](docs/spells/svg/avis.svg) |
+| `Bombarda` | [`bombarda.png`](docs/spells/bombarda.png) | [`bombarda.svg`](docs/spells/svg/bombarda.svg) |
+| `Colovaria` | [`colovaria.png`](docs/spells/colovaria.png) | [`colovaria.svg`](docs/spells/svg/colovaria.svg) |
+| `Engorgio` | [`engorgio.png`](docs/spells/engorgio.png) | [`engorgio.svg`](docs/spells/svg/engorgio.svg) |
+| `Epoximise` | [`epoximise.png`](docs/spells/epoximise.png) | [`epoximise.svg`](docs/spells/svg/epoximise.svg) |
+| `Evanesco` | [`evanesco.png`](docs/spells/evanesco.png) | [`evanesco.svg`](docs/spells/svg/evanesco.svg) |
+| `Expelliarmus` | [`expelliarmus.png`](docs/spells/expelliarmus.png) | [`expelliarmus.svg`](docs/spells/svg/expelliarmus.svg) |
+| `Flipendo` | [`flipendo.png`](docs/spells/flipendo.png) | [`flipendo.svg`](docs/spells/svg/flipendo.svg) |
+| `Fumos` | [`fumos.png`](docs/spells/fumos.png) | [`fumos.svg`](docs/spells/svg/fumos.svg) |
+| `Gemino` | [`gemino.png`](docs/spells/gemino.png) | [`gemino.svg`](docs/spells/svg/gemino.svg) |
+| `Impedimenta` | [`impedimenta.png`](docs/spells/impedimenta.png) | [`impedimenta.svg`](docs/spells/svg/impedimenta.svg) |
+| `Incendio` | [`incendio.png`](docs/spells/incendio.png) | [`incendio.svg`](docs/spells/svg/incendio.svg) |
+| `Locomotor` | [`locomotor.png`](docs/spells/locomotor.png) | [`locomotor.svg`](docs/spells/svg/locomotor.svg) |
+| `Lumos` | [`lumos.png`](docs/spells/lumos.png) | [`lumos.svg`](docs/spells/svg/lumos.svg) |
+| `Oppugno` | [`oppugno.png`](docs/spells/oppugno.png) | [`oppugno.svg`](docs/spells/svg/oppugno.svg) |
+| `Orchideous` | [`orchideous.png`](docs/spells/orchideous.png) | [`orchideous.svg`](docs/spells/svg/orchideous.svg) |
+| `Reducio` | [`reducio.png`](docs/spells/reducio.png) | [`reducio.svg`](docs/spells/svg/reducio.svg) |
+| `Reducto` | [`reducto.png`](docs/spells/reducto.png) | [`reducto.svg`](docs/spells/svg/reducto.svg) |
+| `Reparo` | [`reparo.png`](docs/spells/reparo.png) | [`reparo.svg`](docs/spells/svg/reparo.svg) |
+| `Serpensortia` | [`serpensortia.png`](docs/spells/serpensortia.png) | [`serpensortia.svg`](docs/spells/svg/serpensortia.svg) |
+| `Vermillious` | [`vermillious.png`](docs/spells/vermillious.png) | [`vermillious.svg`](docs/spells/svg/vermillious.svg) |
+| `Wingardium Leviosa` | [`wingardium_leviosa.png`](docs/spells/wingardium_leviosa.png) | [`wingardium_leviosa.svg`](docs/spells/svg/wingardium_leviosa.svg) |
 
 ---
 

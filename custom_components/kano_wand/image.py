@@ -10,7 +10,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, EVENT_TYPE_RECENTRE, SIGNAL_WAND_SPELL
+from .const import DOMAIN, EVENT_TYPE_RECENTRE, SIGNAL_WAND_DRAW
 from .drawing import render_spell_png
 from .entity import KanoWandBaseEntity
 from .wand import KanoWand
@@ -50,18 +50,24 @@ class KanoWandSpellImage(KanoWandBaseEntity, ImageEntity):
             return {}
         return {
             "spell": self._last_spell_data.get("spell"),
+            "recognized": self._last_spell_data.get("recognized", True),
+            "status": self._last_spell_data.get("status", "recognized"),
             "score": self._last_spell_data.get("score"),
+            "closest_spell": self._last_spell_data.get("closest_spell"),
+            "closest_score": self._last_spell_data.get("closest_score"),
+            "runner_up": self._last_spell_data.get("runner_up"),
+            "runner_up_score": self._last_spell_data.get("runner_up_score"),
             "duration": self._last_spell_data.get("duration"),
             "points": self._last_spell_data.get("points"),
         }
 
     async def async_added_to_hass(self) -> None:
-        """Subscribe to spell dispatcher updates."""
+        """Subscribe to wand drawing dispatcher updates."""
         await super().async_added_to_hass()
         self.async_on_remove(
             async_dispatcher_connect(
                 self.hass,
-                SIGNAL_WAND_SPELL.format(self.entry.entry_id),
+                SIGNAL_WAND_DRAW.format(self.entry.entry_id),
                 self._async_on_spell,
             )
         )

@@ -50,6 +50,7 @@ class KanoWand:
         name: str = "Kano Wand",
         on_button: Callable[[bool], None] | None = None,
         on_spell: Callable[[dict[str, Any]], None] | None = None,
+        on_draw: Callable[[dict[str, Any]], None] | None = None,
         on_connected: Callable[[bool], None] | None = None,
         on_led: Callable[[bool, tuple[int, int, int]], None] | None = None,
         on_device_info: Callable[[str | None, str | None], None] | None = None,
@@ -61,6 +62,7 @@ class KanoWand:
         self.name = name
         self.on_button_cb = on_button
         self.on_spell_cb = on_spell
+        self.on_draw_cb = on_draw
         self.on_connected_cb = on_connected
         self.on_led_cb = on_led
         self.on_device_info_cb = on_device_info
@@ -431,20 +433,36 @@ class KanoWand:
                     spell_data = self.gs.recognise(cleaned_positions)
                     spell_name = spell_data.get("spell")
                     score_pct = float(spell_data.get("score") or 0.0) * 100.0
+                    spell_data["duration"] = round(seconds, 3)
+                    spell_data["points"] = len(cleaned_positions)
+                    spell_data["positions"] = cleaned_positions
+
                     if spell_name == NOT_A_SPELL:
-                        _LOGGER.debug("%s: Gesture classified as non-spell noise", self.name)
+                        spell_data["recognized"] = False
+                        spell_data["status"] = "unrecognized"
+                        _LOGGER.debug(
+                            "%s: Gesture classified as non-spell (closest: %s %.1f%%)",
+                            self.name,
+                            spell_data.get("closest_spell"),
+                            float(spell_data.get("closest_score") or 0.0) * 100.0,
+                        )
+                        if self.on_draw_cb:
+                            self.on_draw_cb(spell_data)
                     elif score_pct >= self.min_spell_confidence:
-                        spell_data["duration"] = round(seconds, 3)
-                        spell_data["points"] = len(cleaned_positions)
-                        spell_data["positions"] = cleaned_positions
+                        spell_data["recognized"] = True
+                        spell_data["status"] = "recognized"
                         if self.vibrate_on_spell and self.is_connected:
                             self._spawn_background_task(
                                 self.vibrate(VIBRATION_SHORT),
                                 f"{self.name}_spell_vibrate",
                             )
+                        if self.on_draw_cb:
+                            self.on_draw_cb(spell_data)
                         if self.on_spell_cb:
                             self.on_spell_cb(spell_data)
                     else:
+                        spell_data["recognized"] = False
+                        spell_data["status"] = "low_confidence"
                         _LOGGER.debug(
                             "%s: Ignoring spell %s (confidence %.1f%% < minimum %.1f%%)",
                             self.name,
@@ -452,8 +470,28 @@ class KanoWand:
                             score_pct,
                             self.min_spell_confidence,
                         )
+                        if self.on_draw_cb:
+                            self.on_draw_cb(spell_data)
                 except Exception as ex:
                     _LOGGER.warning("Error recognizing spell gesture: %s", ex)
+            elif len(self.current_spell) >= 2:
+                flipped_positions = [
+                    self._flip_cord(entry) for entry in self.current_spell
+                ]
+                if self.on_draw_cb:
+                    self.on_draw_cb(
+                        {
+                            "spell": NOT_A_SPELL,
+                            "recognized": False,
+                            "status": "too_short",
+                            "score": 0.0,
+                            "closest_spell": None,
+                            "closest_score": 0.0,
+                            "duration": round(seconds, 3),
+                            "points": len(flipped_positions),
+                            "positions": flipped_positions,
+                        }
+                    )
 
             self.current_spell.clear()
 

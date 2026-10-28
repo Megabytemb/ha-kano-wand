@@ -97,13 +97,21 @@ class GestureSpells:
         p = (exp_logits / np.sum(exp_logits)).tolist()
 
         ranked = sorted(enumerate(p), key=lambda item: item[1], reverse=True)
+        real_ranked = [
+            (idx, val)
+            for idx, val in ranked
+            if self.theSpells[idx] != "not a Spell"
+        ]
         best_idx, max_value = ranked[0]
         second_idx, second_val = ranked[1]
+        best_real_idx, best_real_val = real_ranked[0]
         return {
             "score": float(max_value),
             "spell": self.theSpells[best_idx],
             "runner_up": self.theSpells[second_idx],
             "runner_up_score": float(second_val),
+            "closest_spell": self.theSpells[best_real_idx],
+            "closest_score": float(best_real_val),
         }
 
     def toCurve(
@@ -287,4 +295,10 @@ class GestureSpells:
         ]
         if valid_spells:
             return max(valid_spells, key=lambda c: c["score"])
-        return max(candidates, key=lambda c: c["score"])
+        best_closest = max(
+            candidates, key=lambda c: float(c.get("closest_score") or 0.0)
+        )
+        winner = dict(max(candidates, key=lambda c: c["score"]))
+        winner["closest_spell"] = best_closest.get("closest_spell")
+        winner["closest_score"] = best_closest.get("closest_score")
+        return winner

@@ -25,6 +25,7 @@ from .const import (
     SERVICE_VIBRATE,
     SIGNAL_WAND_BUTTON,
     SIGNAL_WAND_CONNECTED,
+    SIGNAL_WAND_DRAW,
     SIGNAL_WAND_LED,
     SIGNAL_WAND_SPELL,
     VIBRATION_PATTERNS,
@@ -100,6 +101,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         async_dispatcher_send(
             hass, SIGNAL_WAND_SPELL.format(entry.entry_id), spell_data
         )
+        # If invoked directly (e.g. in tests) without going through _on_draw, also update image
+        if "recognized" not in spell_data:
+            async_dispatcher_send(
+                hass, SIGNAL_WAND_DRAW.format(entry.entry_id), spell_data
+            )
+
+    @callback
+    def _on_draw(draw_data: dict[str, Any]) -> None:
+        async_dispatcher_send(
+            hass, SIGNAL_WAND_DRAW.format(entry.entry_id), draw_data
+        )
 
     @callback
     def _on_connected(connected: bool) -> None:
@@ -136,6 +148,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         name=entry.title or f"Kano Wand ({address})",
         on_button=_on_button,
         on_spell=_on_spell,
+        on_draw=_on_draw,
         on_connected=_on_connected,
         on_led=_on_led,
         on_device_info=_on_device_info,
