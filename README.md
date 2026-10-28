@@ -84,6 +84,27 @@ data:
 
 ---
 
+## 🧭 Recentre Orientation vs. Magnetometer Calibration
+
+The Kano Wand contains a 9-axis IMU (accelerometer, gyroscope, and magnetometer) that fuses sensor readings into 3D quaternions. The integration provides two different calibration controls depending on what you need:
+
+### 1. Recentre Orientation (`button.kano_wand_recentre` or Short Button Click)
+- **What it does**: Instantly resets the wand's relative quaternion origin (`CHAR_QUATERNIONS_RESET`) so that whichever direction you are currently pointing the wand becomes the center `(400, 300)` of the virtual canvas.
+- **When to use it**: Anytime you turn to face a different wall/room, or before practicing a spell. You can trigger it at any time by **short-clicking the physical button on the wand (`<0.35s`)** or pressing **Recentre Orientation** in Home Assistant.
+
+### 2. Calibrate Magnetometer (`button.kano_wand_calibrate_magnetometer`)
+- **What it does**: Runs the wand firmware's hardware magnetometer calibration routine (`CHAR_MAGN_CALIBRATE`). It temporarily pauses quaternion streaming, instructs the onboard IMU to sample hard-iron/soft-iron magnetic offsets, waits for the firmware status response, and resumes streaming.
+- **When you might need it**:
+  - **Sideways drift on `Last Spell Drawing`**: You draw a straight vertical line (like *Serpensortia* or *Lumos*), but the rendered path curves or hooks sideways on its own.
+  - **Tilted or skewed axes**: Up/down or left/right wand movements look rotated at an angle on `Last Spell Drawing` even right after recentring.
+  - **Magnetic interference or battery change**: The wand was stored near a magnet, speaker, laptop MagSafe charger, or metal desk, or you just replaced the 2× AAA batteries.
+- **How to run it**:
+  1. Wake the wand so it is connected to Home Assistant.
+  2. Press **Calibrate Magnetometer** (`button.kano_wand_calibrate_magnetometer`) in Home Assistant while slowly rotating the wand in a **figure-8** motion in the air for ~3 seconds.
+  3. Point the wand comfortably forward and **short-click the wand button once** to recentre the origin.
+
+---
+
 ## 🪄 Recognized Spells (25 Spells + Recentre)
 
 The neural network model (`model.tflite`, bit-for-bit identical to the official Kano Coding App's `spelling.weights.bin`) recognizes the following **25 spell gestures** (plus `recentre` on a quick button tap):
