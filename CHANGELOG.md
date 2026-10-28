@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.4.0](https://github.com/Megabytemb/ha-kano-wand/compare/v1.3.0...v1.4.0) (2026-10-28)
+
+
+### Features
+
+* add Flick event & triggers, boolean Battery binary sensor, Temperature sensor, and Magnetometer Calibration from official Kano app ([bd874c7](https://github.com/Megabytemb/ha-kano-wand/commit/bd874c7c13781df04b397bc65930a6b35aad7ac8))
+* always render every wand attempt on Last Spell Drawing and add all 25 model & official app spell diagrams ([f015433](https://github.com/Megabytemb/ha-kano-wand/commit/f015433a399b8bdfac1139470eadbc35828f1167))
+
+
+### Documentation
+
+* add section explaining Recentre Orientation vs Magnetometer Calibration in README ([e2ef1b9](https://github.com/Megabytemb/ha-kano-wand/commit/e2ef1b966d466c021ec7bc17e516f63b7a4eaeef))
+
 ## [1.3.0](https://github.com/Megabytemb/ha-kano-wand/compare/v1.2.0...v1.3.0) (2026-10-25)
 
 
