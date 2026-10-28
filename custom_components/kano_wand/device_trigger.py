@@ -21,9 +21,11 @@ from homeassistant.helpers.typing import ConfigType
 from .const import (
     DOMAIN,
     EVENT_TYPE_RECENTRE,
+    FLICK_DIRECTIONS,
     REAL_SPELLS,
     SIGNAL_WAND_BUTTON,
     SIGNAL_WAND_CONNECTED,
+    SIGNAL_WAND_FLICK,
     SIGNAL_WAND_SPELL,
 )
 
@@ -32,14 +34,23 @@ CONF_SUBTYPE = "subtype"
 TRIGGER_TYPE_SPELL_CAST = "spell_cast"
 TRIGGER_TYPE_ANY_SPELL = "any_spell"
 TRIGGER_TYPE_RECENTRE = "recentre"
+TRIGGER_TYPE_FLICK_UP = "flick_up"
+TRIGGER_TYPE_FLICK_DOWN = "flick_down"
+TRIGGER_TYPE_FLICK_LEFT = "flick_left"
+TRIGGER_TYPE_FLICK_RIGHT = "flick_right"
 TRIGGER_TYPE_BUTTON_PRESSED = "button_pressed"
 TRIGGER_TYPE_BUTTON_RELEASED = "button_released"
 TRIGGER_TYPE_CONNECTED = "connected"
 TRIGGER_TYPE_DISCONNECTED = "disconnected"
 
+FLICK_TRIGGER_TYPES: tuple[str, ...] = tuple(
+    f"flick_{d}" for d in FLICK_DIRECTIONS
+)
+
 SIMPLE_TRIGGER_TYPES: list[str] = [
     TRIGGER_TYPE_ANY_SPELL,
     TRIGGER_TYPE_RECENTRE,
+    *FLICK_TRIGGER_TYPES,
     TRIGGER_TYPE_BUTTON_PRESSED,
     TRIGGER_TYPE_BUTTON_RELEASED,
     TRIGGER_TYPE_CONNECTED,
@@ -201,6 +212,31 @@ async def async_attach_trigger(
             unsubs.append(
                 async_dispatcher_connect(
                     hass, SIGNAL_WAND_CONNECTED.format(entry_id), _handle_connected
+                )
+            )
+
+    elif trigger_type in FLICK_TRIGGER_TYPES:
+        expected_dir = trigger_type.removeprefix("flick_")
+
+        @callback
+        def _handle_flick(flick_data: dict[str, Any]) -> None:
+            if flick_data.get("direction") == expected_dir:
+                hass.async_run_hass_job(
+                    job,
+                    {
+                        "trigger": {
+                            **base_payload,
+                            "direction": expected_dir,
+                            "intensity": flick_data.get("intensity"),
+                            "description": f"Kano Wand flicked {expected_dir}",
+                        }
+                    },
+                )
+
+        for entry_id in entry_ids:
+            unsubs.append(
+                async_dispatcher_connect(
+                    hass, SIGNAL_WAND_FLICK.format(entry_id), _handle_flick
                 )
             )
 

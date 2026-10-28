@@ -38,12 +38,13 @@ async def test_device_triggers_list_and_fire(hass, config_entry) -> None:
     wand = hass.data[DOMAIN][config_entry.entry_id]
 
     triggers = await async_get_triggers(hass, "dev_wand_1")
-    assert len(triggers) == 6 + len(REAL_SPELLS) == 31
+    assert len(triggers) == 10 + len(REAL_SPELLS) == 35
     assert [t["subtype"] for t in triggers if t["type"] == "spell_cast"] == REAL_SPELLS
 
     fired_lumos: list[dict] = []
     fired_any_spell: list[dict] = []
     fired_button: list[dict] = []
+    fired_flick_up: list[dict] = []
 
     unsub_lumos = await async_attach_trigger(
         hass,
@@ -79,6 +80,17 @@ async def test_device_triggers_list_and_fire(hass, config_entry) -> None:
         lambda payload: fired_button.append(payload),
         {"trigger_data": {"id": "btn_trig"}},
     )
+    unsub_flick = await async_attach_trigger(
+        hass,
+        {
+            "platform": "device",
+            "domain": DOMAIN,
+            "device_id": "dev_wand_1",
+            "type": "flick_up",
+        },
+        lambda payload: fired_flick_up.append(payload),
+        {"trigger_data": {"id": "flick_trig"}},
+    )
 
     # Casting Lumos twice in a row fires both times
     wand.on_spell_cb({"spell": "Lumos", "score": 0.96, "duration": 0.8, "points": 28})
@@ -98,12 +110,20 @@ async def test_device_triggers_list_and_fire(hass, config_entry) -> None:
     wand.on_button_cb(False)
     assert len(fired_button) == 1
 
+    # Flick up fires flick_up trigger (and ignores flick_down)
+    wand.on_flick_cb({"direction": "down", "intensity": 120.0})
+    assert len(fired_flick_up) == 0
+    wand.on_flick_cb({"direction": "up", "intensity": 185.0})
+    assert len(fired_flick_up) == 1
+    assert fired_flick_up[0]["trigger"]["direction"] == "up"
+
     # No custom events were dumped onto hass.bus
     assert len(hass.bus.events) == 0
 
     unsub_lumos()
     unsub_any()
     unsub_btn()
+    unsub_flick()
     await async_unload_entry(hass, config_entry)
 
 
@@ -122,7 +142,7 @@ async def test_device_actions_and_conditions(
     wand = hass.data[DOMAIN][config_entry.entry_id]
 
     actions = await async_get_actions(hass, "dev_wand_1")
-    assert len(actions) == 11
+    assert len(actions) == 12
 
     conditions = await async_get_conditions(hass, "dev_wand_1")
     assert len(conditions) == 3

@@ -13,14 +13,17 @@ from bleak.exc import BleakError
 from bleak_retry_connector import BleakClientWithServiceCache, establish_connection
 
 from .const import (
+    CHAR_BATTERY,
     CHAR_BUTTON,
     CHAR_HARDWARE,
     CHAR_KEEP_ALIVE,
     CHAR_LED,
+    CHAR_MAGN_CALIBRATE,
     CHAR_ORGANIZATION,
     CHAR_QUATERNIONS,
     CHAR_QUATERNIONS_RESET,
     CHAR_SOFTWARE,
+    CHAR_TEMP,
     CHAR_VIBRATOR,
     DEFAULT_KEEP_ALIVE_TIMEOUT_MINUTES,
     EVENT_TYPE_RECENTRE,
@@ -41,6 +44,86 @@ WIDTH = 800
 HEIGHT = 600
 
 
+class FlickDetector:
+    """Directional flick gesture detector ported from the official Kano Wand app (editor.js)."""
+
+    def __init__(
+        self,
+        width: int = WIDTH,
+        height: int = HEIGHT,
+        cooldown_seconds: float = 0.45,
+    ) -> None:
+        """Initialize the flick detector."""
+        self.width = width
+        self.height = height
+        self.cooldown_seconds = cooldown_seconds
+        self._last_trigger_time: float = 0.0
+        self.strength_x = 100.0
+        self.strength_y = 80.0
+        self.strength_sq_x = self.strength_x**2
+        self.strength_sq_y = self.strength_y**2
+        self.reset()
+
+    def reset(self) -> None:
+        """Reset flick state (e.g. while button is held for spell drawing)."""
+        self._last_point: tuple[float, float] = (self.width / 2.0, self.height / 2.0)
+        self.prev_point: tuple[float, float] | None = None
+        self.vertical: bool | None = None
+        self.direction: str | None = None
+        self.wand_gesture: list[float] = []
+
+    def process_point(
+        self, x: float, y: float, now: float | None = None
+    ) -> dict[str, Any] | None:
+        """Process a 2D projected point and return a flick event dict if completed."""
+        ts = now if now is not None else time.monotonic()
+        speed = WandConversion.distance(self._last_point[0], x, self._last_point[1], y) / 0.4
+        self._last_point = (x, y)
+
+        if self.prev_point is not None:
+            if x < -200 or x > 1000:
+                self.prev_point = self._last_point
+                return None
+
+            dx = x - self.prev_point[0]
+            dy = y - self.prev_point[1]
+            sx = dx * dx
+            sy = dy * dy
+
+            if len(self.wand_gesture) >= 2:
+                is_vert = sy > sx
+                delta = dy if is_vert else dx
+                strong_enough = (delta * delta) > self.strength_sq_x
+                if is_vert == self.vertical and speed > 10.0 and strong_enough:
+                    self.wand_gesture.append(delta)
+                    return None
+
+                direction = self.direction
+                intensity = round(max((abs(v) for v in self.wand_gesture), default=0.0), 1)
+                self.wand_gesture.clear()
+                self.vertical = None
+                self.direction = None
+                self.prev_point = self._last_point
+                if direction and (ts - self._last_trigger_time) >= self.cooldown_seconds:
+                    self._last_trigger_time = ts
+                    return {"direction": direction, "intensity": intensity}
+                return None
+
+            if sx > sy and sx > self.strength_sq_x:
+                self.wand_gesture.append(dx)
+                self.vertical = False
+                self.direction = "right" if dx > 0 else "left"
+                return None
+            if sy > sx and sy > self.strength_sq_y:
+                self.wand_gesture.append(dy)
+                self.vertical = True
+                self.direction = "down" if dy > 0 else "up"
+                return None
+
+        self.prev_point = self._last_point
+        return None
+
+
 class KanoWand:
     """Interface to a Kano Wand BLE device with proxy-friendly reconnection."""
 
@@ -51,8 +134,11 @@ class KanoWand:
         on_button: Callable[[bool], None] | None = None,
         on_spell: Callable[[dict[str, Any]], None] | None = None,
         on_draw: Callable[[dict[str, Any]], None] | None = None,
+        on_flick: Callable[[dict[str, Any]], None] | None = None,
         on_connected: Callable[[bool], None] | None = None,
         on_led: Callable[[bool, tuple[int, int, int]], None] | None = None,
+        on_battery: Callable[[bool], None] | None = None,
+        on_temperature: Callable[[float], None] | None = None,
         on_device_info: Callable[[str | None, str | None], None] | None = None,
         gesture_spells: GestureSpells | None = None,
         vibrate_on_connect: bool = True,
@@ -63,8 +149,11 @@ class KanoWand:
         self.on_button_cb = on_button
         self.on_spell_cb = on_spell
         self.on_draw_cb = on_draw
+        self.on_flick_cb = on_flick
         self.on_connected_cb = on_connected
         self.on_led_cb = on_led
+        self.on_battery_cb = on_battery
+        self.on_temperature_cb = on_temperature
         self.on_device_info_cb = on_device_info
         self.vibrate_on_connect = vibrate_on_connect
         self.vibrate_on_spell: bool = True
@@ -78,6 +167,7 @@ class KanoWand:
         self.auto_connect: bool = True
 
         self.conversion = WandConversion(WIDTH, HEIGHT)
+        self.flick_detector = FlickDetector(WIDTH, HEIGHT)
         self.gs = gesture_spells or GestureSpells(load_immediately=True)
 
         # Runtime state
@@ -85,7 +175,8 @@ class KanoWand:
         self.current_spell: list[list[float]] = []
         self._time_button_down: float = 0.0
         self._time_button_up: float = 0.0
-        self.reset_timeout: float = 0.2
+        # Matches official Kano Wand app 350ms pressTimeout between short click (recentre) and spell draw
+        self.reset_timeout: float = 0.35
 
         # Keep-alive & activity tracking
         self.keep_alive_timeout_minutes: float = DEFAULT_KEEP_ALIVE_TIMEOUT_MINUTES
@@ -93,9 +184,11 @@ class KanoWand:
         self.keep_alive_task: asyncio.Task[None] | None = None
         self._background_tasks: set[asyncio.Task[Any]] = set()
 
-        # LED & Device Info state
+        # LED, Battery, Temperature & Device Info state
         self.led_on: bool = False
         self.led_rgb: tuple[int, int, int] = (148, 0, 211)  # Default magic purple
+        self.battery_low: bool = False
+        self.temperature: float | None = None
         self.hardware_version: str | None = None
         self.software_version: str | None = None
         self.organization: str | None = None
@@ -244,6 +337,24 @@ class KanoWand:
                 await self.set_led(True, self.led_rgb)
                 await self.vibrate(VIBRATION_BURST)
 
+            if self.client and self.is_connected:
+                with contextlib.suppress(Exception):
+                    batt_raw = await self.client.read_gatt_char(CHAR_BATTERY)
+                    if isinstance(batt_raw, (bytes, bytearray)) and len(batt_raw) == 1:
+                        self._on_battery_notification(None, bytearray(batt_raw))
+                with contextlib.suppress(Exception):
+                    await self.client.start_notify(
+                        CHAR_BATTERY, self._on_battery_notification
+                    )
+                with contextlib.suppress(Exception):
+                    temp_raw = await self.client.read_gatt_char(CHAR_TEMP)
+                    if isinstance(temp_raw, (bytes, bytearray)) and len(temp_raw) == 2:
+                        self._on_temperature_notification(None, bytearray(temp_raw))
+                with contextlib.suppress(Exception):
+                    await self.client.start_notify(
+                        CHAR_TEMP, self._on_temperature_notification
+                    )
+
             if self.software_version is None and self.client and self.is_connected:
                 with contextlib.suppress(Exception):
                     sw = await self.client.read_gatt_char(CHAR_SOFTWARE)
@@ -346,6 +457,43 @@ class KanoWand:
                 CHAR_QUATERNIONS_RESET, bytearray([1]), True
             )
 
+    async def calibrate_magnetometer(self) -> bool:
+        """Run hardware magnetometer calibration on the wand's IMU (matching official Kano app)."""
+        self._record_activity()
+        if not self.is_connected:
+            if not await self.ensure_connected():
+                raise BleakError(f"{self.name} is not connected")
+
+        assert self.client is not None
+        done_event = asyncio.Event()
+        result_status: list[int] = []
+
+        def _on_cal_notify(sender: Any, data: bytearray) -> None:
+            if data and data[0] in (2, 3):
+                result_status.append(data[0])
+                done_event.set()
+
+        with contextlib.suppress(Exception):
+            await self.client.stop_notify(CHAR_QUATERNIONS)
+
+        try:
+            await self.client.start_notify(CHAR_MAGN_CALIBRATE, _on_cal_notify)
+            await self.client.write_gatt_char(
+                CHAR_MAGN_CALIBRATE, bytearray([1]), True
+            )
+            with contextlib.suppress(TimeoutError, asyncio.TimeoutError):
+                await asyncio.wait_for(done_event.wait(), timeout=3.0)
+        finally:
+            if self.client and self.client.is_connected:
+                with contextlib.suppress(Exception):
+                    await self.client.stop_notify(CHAR_MAGN_CALIBRATE)
+                with contextlib.suppress(Exception):
+                    await self.client.start_notify(
+                        CHAR_QUATERNIONS, self._on_motion_notification
+                    )
+
+        return not result_status or result_status[-1] == 2
+
     async def vibrate(self, pattern: int | str = VIBRATION_REGULAR) -> None:
         """Make the wand vibrate using a pattern name or integer (1-7)."""
         self._record_activity()
@@ -401,9 +549,11 @@ class KanoWand:
         if pressed:
             self._time_button_down = time.monotonic()
             self.current_spell.clear()
+            self.flick_detector.reset()
         else:
             self._time_button_up = time.monotonic()
             seconds = self._time_button_up - self._time_button_down
+            self.flick_detector.reset()
 
             if seconds < self.reset_timeout:
                 # Short click: recentre orientation and emit recentre event
@@ -514,8 +664,7 @@ class KanoWand:
             self._rate_window_start = now
             self._rate_window_count = 0
 
-        # Fast-path drop when button is not held down to keep CPU & state machine idle
-        if not self.button_pressed or len(data) < 8:
+        if len(data) < 8:
             return
 
         y = int.from_bytes(data[0:2], byteorder="little", signed=True)
@@ -524,7 +673,34 @@ class KanoWand:
         z = int.from_bytes(data[6:8], byteorder="little", signed=True)
 
         pos = self.conversion.position([x, y, z, w])
-        self.current_spell.append([pos["x"], pos["y"]])
+        if self.button_pressed:
+            self.current_spell.append([pos["x"], pos["y"]])
+        elif self.on_flick_cb is not None:
+            flick = self.flick_detector.process_point(
+                pos["x"], HEIGHT - pos["y"], now=now
+            )
+            if flick is not None:
+                self._record_activity()
+                self.on_flick_cb(flick)
+
+    def _on_battery_notification(self, sender: Any, data: bytearray) -> None:
+        """Handle low-battery flag notification (0 = Normal, 1 = Low Battery in official Kano app)."""
+        if not data:
+            return
+        self.battery_low = data[0] == 1
+        if self.on_battery_cb:
+            self.on_battery_cb(self.battery_low)
+
+    def _on_temperature_notification(self, sender: Any, data: bytearray) -> None:
+        """Handle temperature characteristic notification (signed 16-bit little-endian)."""
+        if not data or len(data) < 2:
+            return
+        raw_val = int.from_bytes(data[0:2], byteorder="little", signed=True)
+        temp_c = round(raw_val / 100.0, 1) if abs(raw_val) > 120 else float(raw_val)
+        if self.temperature is None or abs(temp_c - self.temperature) >= 0.5:
+            self.temperature = temp_c
+            if self.on_temperature_cb:
+                self.on_temperature_cb(self.temperature)
 
     @staticmethod
     def _flip_cord(coords: list[float]) -> list[float]:

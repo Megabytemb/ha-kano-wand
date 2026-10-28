@@ -29,6 +29,8 @@ async def async_get_config_entry_diagnostics(
         "vibrate_on_spell": wand.vibrate_on_spell,
         "led_on": wand.led_on,
         "led_rgb": list(wand.led_rgb),
+        "battery_low": wand.battery_low,
+        "temperature": wand.temperature,
         "button_pressed": wand.button_pressed,
         "quaternion_packets_received": wand.quaternion_packets_received,
         "quaternion_rate_hz": wand.quaternion_rate_hz,

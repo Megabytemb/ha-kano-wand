@@ -23,6 +23,7 @@ async def async_setup_entry(
         [
             KanoWandVibrateButton(entry, wand),
             KanoWandRecentreButton(entry, wand),
+            KanoWandCalibrateMagnetometerButton(entry, wand),
             KanoWandDisconnectButton(entry, wand),
         ]
     )
@@ -75,3 +76,20 @@ class KanoWandDisconnectButton(KanoWandBaseEntity, ButtonEntity):
     async def async_press(self) -> None:
         """Immediately disconnect from the wand."""
         await self.wand.disconnect()
+
+
+class KanoWandCalibrateMagnetometerButton(KanoWandBaseEntity, ButtonEntity):
+    """Diagnostic button entity to run the wand's hardware IMU magnetometer calibration."""
+
+    _attr_name = "Calibrate Magnetometer"
+    _attr_icon = "mdi:magnet-on"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, entry: ConfigEntry, wand: KanoWand) -> None:
+        """Initialize the calibrate magnetometer button."""
+        super().__init__(entry, wand)
+        self._attr_unique_id = f"{entry.entry_id}_calibrate_magnetometer"
+
+    async def async_press(self) -> None:
+        """Run hardware magnetometer calibration on the wand."""
+        await self.wand.calibrate_magnetometer()

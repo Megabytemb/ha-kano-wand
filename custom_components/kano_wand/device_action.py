@@ -18,6 +18,7 @@ ACTION_TYPES: list[str] = [
     "led_turn_on",
     "led_turn_off",
     "recentre",
+    "calibrate_magnetometer",
     "disconnect",
 ]
 
@@ -71,5 +72,7 @@ async def async_call_action_from_config(
         await wand.set_led(False)
     elif action_type == "recentre":
         await wand.reset_position()
+    elif action_type == "calibrate_magnetometer":
+        await wand.calibrate_magnetometer()
     elif action_type == "disconnect":
         await wand.disconnect()

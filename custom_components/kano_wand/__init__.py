@@ -23,11 +23,14 @@ from .const import (
     ATTR_PATTERN,
     DOMAIN,
     SERVICE_VIBRATE,
+    SIGNAL_WAND_BATTERY,
     SIGNAL_WAND_BUTTON,
     SIGNAL_WAND_CONNECTED,
     SIGNAL_WAND_DRAW,
+    SIGNAL_WAND_FLICK,
     SIGNAL_WAND_LED,
     SIGNAL_WAND_SPELL,
+    SIGNAL_WAND_TEMP,
     VIBRATION_PATTERNS,
     VIBRATION_REGULAR,
 )
@@ -114,6 +117,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
     @callback
+    def _on_flick(flick_data: dict[str, Any]) -> None:
+        async_dispatcher_send(
+            hass, SIGNAL_WAND_FLICK.format(entry.entry_id), flick_data
+        )
+
+    @callback
+    def _on_battery(battery_low: bool) -> None:
+        async_dispatcher_send(
+            hass, SIGNAL_WAND_BATTERY.format(entry.entry_id), battery_low
+        )
+
+    @callback
+    def _on_temperature(temperature: float) -> None:
+        async_dispatcher_send(
+            hass, SIGNAL_WAND_TEMP.format(entry.entry_id), temperature
+        )
+
+    @callback
     def _on_connected(connected: bool) -> None:
         if not connected:
             _clear_ble_advertisement_history(address)
@@ -149,8 +170,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         on_button=_on_button,
         on_spell=_on_spell,
         on_draw=_on_draw,
+        on_flick=_on_flick,
         on_connected=_on_connected,
         on_led=_on_led,
+        on_battery=_on_battery,
+        on_temperature=_on_temperature,
         on_device_info=_on_device_info,
         gesture_spells=gesture_spells,
     )

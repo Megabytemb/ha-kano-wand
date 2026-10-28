@@ -43,16 +43,20 @@ A custom Home Assistant integration for the **Kano Coding Wand**, built on Home 
 
 | Platform | Entity ID | Name | Description |
 | :--- | :--- | :--- | :--- |
-| `event` | `event.kano_wand_spell` | **Spell** | Stateless event entity that triggers on every recognized spell (plus `"recentre"` on a short `<0.2s` button tap). Fires reliably even when casting the exact same spell twice in a row. Attributes: `score`, `duration`, `points`. |
+| `event` | `event.kano_wand_spell` | **Spell** | Stateless event entity that triggers on every recognized spell (plus `"recentre"` on a short `<0.35s` button tap). Fires reliably even when casting the exact same spell twice in a row. Attributes: `score`, `duration`, `points`. |
+| `event` | `event.kano_wand_flick` | **Flick** | Stateless event entity that triggers on directional wand flicks (`"up"`, `"down"`, `"left"`, `"right"`) when the button is not held down. Attributes: `direction`, `intensity`. |
 | `image` | `image.kano_wand_last_spell_drawing` | **Last Spell Drawing** | Poster-styled PNG diagram of the last wand motion path—renders **every** attempt (golden trail for recognized spells, coral-red trail with `CLOSEST: <SPELL> <PCT>%` feedback for unrecognized/practice attempts). |
 | `sensor` | `sensor.kano_wand_last_spell` | **Last Spell** | Displays the most recently recognized spell name on dashboards. Attributes: `score`, `duration`, `points`. |
 | `sensor` | `sensor.kano_wand_last_spell_confidence` | **Last Spell Confidence** | Confidence score (`%`, `0`–`100%`) of the most recently recognized spell. |
+| `sensor` | `sensor.kano_wand_temperature` | **Temperature** | Diagnostic temperature sensor (`°C`) from the wand's onboard IMU. |
 | `binary_sensor` | `binary_sensor.kano_wand_button` | **Button** | `on` while the wand button is held down; `off` when released. |
 | `binary_sensor` | `binary_sensor.kano_wand_connected` | **Connected** | Diagnostic connectivity sensor (`on` when actively connected to a BLE proxy/adapter). |
+| `binary_sensor` | `binary_sensor.kano_wand_battery` | **Battery** | Diagnostic low-battery sensor (`Normal` when `CHAR_BATTERY == 0`, `Low` when `CHAR_BATTERY == 1`, matching the official Kano app). |
 | `light` | `light.kano_wand_led` | **LED** | RGB light controlling the LED on the tip of the wand (`ColorMode.RGB`). |
 | `select` | `select.kano_wand_vibration_pattern` | **Vibration Pattern** | Choose from all 7 hardware haptic vibration patterns (`regular`, `short`, `burst`, `long`, `short_long`, `short_short`, `big_pause`). Selecting an option previews it immediately if connected. |
 | `button` | `button.kano_wand_vibrate` | **Vibrate** | Triggers the currently selected **Vibration Pattern** on the wand. |
 | `button` | `button.kano_wand_recentre` | **Recentre Orientation** | Resets the wand's internal quaternion orientation origin. |
+| `button` | `button.kano_wand_calibrate_magnetometer` | **Calibrate Magnetometer** | Runs the wand's onboard IMU hardware magnetometer calibration sequence. |
 | `button` | `button.kano_wand_disconnect` | **Disconnect** | Immediately disconnects the active BLE session so the wand can sleep right away. |
 | `number` | `number.kano_wand_keep_alive_timeout` | **Keep Alive Timeout** | Configuration slider (`0.0`–`30.0` min, step `0.5` min, default `3.0` min) controlling how long the wand stays awake after activity. Persisted across restarts. |
 | `number` | `number.kano_wand_min_spell_confidence` | **Minimum Spell Confidence** | Configuration slider (`0%`–`95%`, step `5%`, default `0%`) to ignore accidental low-confidence gestures before firing spell events. Persisted across restarts. |
@@ -131,6 +135,7 @@ Click **+ (Create Automation)** directly on the Kano Wand Device page in Home As
 - **Device Triggers ("When")**:
   - **Spell cast: `<Spell Name>`** (individual dropdown items for all 25 spells: *Spell cast: Lumos*, *Spell cast: Wingardium Leviosa*, *Spell cast: Incendio*, etc.)
   - **Any spell is cast**
+  - **Wand flicked up** / **Wand flicked down** / **Wand flicked left** / **Wand flicked right**
   - **Button short-clicked (Recentre orientation)**
   - **Wand button pressed** / **Wand button released**
   - **Wand connected** / **Wand disconnected**
@@ -141,6 +146,7 @@ Click **+ (Create Automation)** directly on the Kano Wand Device page in Home As
   - **Vibrate wand (`Regular` / `Short` / `Burst` / `Long` / `Short-Long` / `Short-Short` / `Big Pause`)**
   - **Turn on wand tip LED** / **Turn off wand tip LED**
   - **Recentre wand orientation**
+  - **Calibrate wand magnetometer**
   - **Disconnect wand**
 
 ### 2. Triggering on the `event.kano_wand_spell` Entity

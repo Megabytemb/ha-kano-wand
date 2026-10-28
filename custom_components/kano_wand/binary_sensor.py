@@ -11,7 +11,12 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, SIGNAL_WAND_BUTTON, SIGNAL_WAND_CONNECTED
+from .const import (
+    DOMAIN,
+    SIGNAL_WAND_BATTERY,
+    SIGNAL_WAND_BUTTON,
+    SIGNAL_WAND_CONNECTED,
+)
 from .entity import KanoWandBaseEntity
 from .wand import KanoWand
 
@@ -27,6 +32,7 @@ async def async_setup_entry(
         [
             KanoWandButtonSensor(entry, wand),
             KanoWandConnectedSensor(entry, wand),
+            KanoWandBatterySensor(entry, wand),
         ]
     )
 
@@ -87,4 +93,34 @@ class KanoWandConnectedSensor(KanoWandBaseEntity, BinarySensorEntity):
     def _update_connected(self, connected: bool) -> None:
         """Update the connectivity state."""
         self._attr_is_on = connected
+        self.async_write_ha_state()
+
+
+class KanoWandBatterySensor(KanoWandBaseEntity, BinarySensorEntity):
+    """Binary sensor for the wand's low-battery flag (0 = Normal, 1 = Low)."""
+
+    _attr_name = "Battery"
+    _attr_device_class = BinarySensorDeviceClass.BATTERY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, entry: ConfigEntry, wand: KanoWand) -> None:
+        """Initialize the battery binary sensor."""
+        super().__init__(entry, wand)
+        self._attr_unique_id = f"{entry.entry_id}_battery_low"
+        self._attr_is_on = wand.battery_low
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to battery flag updates."""
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                SIGNAL_WAND_BATTERY.format(self.entry.entry_id),
+                self._update_battery,
+            )
+        )
+
+    @callback
+    def _update_battery(self, battery_low: bool) -> None:
+        """Update the low-battery state."""
+        self._attr_is_on = battery_low
         self.async_write_ha_state()

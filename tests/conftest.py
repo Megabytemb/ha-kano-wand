@@ -67,9 +67,13 @@ def _install_ha_stubs() -> None:
     class UnitOfTime:
         MINUTES = "min"
 
+    class UnitOfTemperature:
+        CELSIUS = "°C"
+
     const.Platform = Platform
     const.EntityCategory = EntityCategory
     const.UnitOfTime = UnitOfTime
+    const.UnitOfTemperature = UnitOfTemperature
     sys.modules["homeassistant.const"] = const
 
     # homeassistant.core
@@ -428,7 +432,9 @@ def _install_ha_stubs() -> None:
     # Platform entity base classes
     sensor_mod = types.ModuleType("homeassistant.components.sensor")
     sensor_mod.SensorEntity = Entity
-    sensor_mod.SensorDeviceClass = types.SimpleNamespace(BATTERY="battery")
+    sensor_mod.SensorDeviceClass = types.SimpleNamespace(
+        BATTERY="battery", TEMPERATURE="temperature"
+    )
     sensor_mod.SensorStateClass = types.SimpleNamespace(MEASUREMENT="measurement")
     sys.modules["homeassistant.components.sensor"] = sensor_mod
 
@@ -441,7 +447,7 @@ def _install_ha_stubs() -> None:
 
     bs_mod.BinarySensorEntity = BinarySensorEntity
     bs_mod.BinarySensorDeviceClass = types.SimpleNamespace(
-        CONNECTIVITY="connectivity", POWER="power"
+        CONNECTIVITY="connectivity", POWER="power", BATTERY="battery"
     )
     sys.modules["homeassistant.components.binary_sensor"] = bs_mod
 
@@ -575,6 +581,7 @@ def fake_ble_client():
     client = MagicMock()
     client.is_connected = True
     client.start_notify = AsyncMock()
+    client.stop_notify = AsyncMock()
     client.write_gatt_char = AsyncMock()
     client.read_gatt_char = AsyncMock(return_value=b"1.0.4")
     client.disconnect = AsyncMock()

@@ -3,14 +3,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity, SensorStateClass
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, EVENT_TYPE_RECENTRE, SIGNAL_WAND_SPELL
+from .const import DOMAIN, EVENT_TYPE_RECENTRE, SIGNAL_WAND_SPELL, SIGNAL_WAND_TEMP
 from .entity import KanoWandBaseEntity
 from .wand import KanoWand
 
@@ -26,6 +30,7 @@ async def async_setup_entry(
         [
             KanoWandSpellSensor(entry, wand),
             KanoWandSpellConfidenceSensor(entry, wand),
+            KanoWandTemperatureSensor(entry, wand),
         ]
     )
 
@@ -127,4 +132,41 @@ class KanoWandSpellConfidenceSensor(KanoWandBaseEntity, SensorEntity):
             "duration": spell_data.get("duration"),
             "points": spell_data.get("points"),
         }
+        self.async_write_ha_state()
+
+
+class KanoWandTemperatureSensor(KanoWandBaseEntity, SensorEntity):
+    """Diagnostic sensor for the Kano Wand's onboard IMU temperature."""
+
+    _attr_name = "Temperature"
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, entry: ConfigEntry, wand: KanoWand) -> None:
+        """Initialize the temperature sensor."""
+        super().__init__(entry, wand)
+        self._attr_unique_id = f"{entry.entry_id}_temperature"
+        self._state: float | None = wand.temperature
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the temperature in Celsius."""
+        return self._state
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to temperature dispatcher updates."""
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                SIGNAL_WAND_TEMP.format(self.entry.entry_id),
+                self._update_temperature,
+            )
+        )
+
+    @callback
+    def _update_temperature(self, temperature: float) -> None:
+        """Update the temperature state."""
+        self._state = temperature
         self.async_write_ha_state()

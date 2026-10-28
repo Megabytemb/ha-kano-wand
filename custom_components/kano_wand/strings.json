@@ -22,6 +22,10 @@
       "any_spell": "Any spell is cast",
       "spell_cast": "Spell cast: {subtype}",
       "recentre": "Button short-clicked (Recentre orientation)",
+      "flick_up": "Wand flicked up",
+      "flick_down": "Wand flicked down",
+      "flick_left": "Wand flicked left",
+      "flick_right": "Wand flicked right",
       "button_pressed": "Wand button pressed",
       "button_released": "Wand button released",
       "connected": "Wand connected",
@@ -65,6 +69,7 @@
       "led_turn_on": "Turn on wand tip LED",
       "led_turn_off": "Turn off wand tip LED",
       "recentre": "Recentre wand orientation",
+      "calibrate_magnetometer": "Calibrate wand magnetometer",
       "disconnect": "Disconnect wand"
     },
     "condition_type": {

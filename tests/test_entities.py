@@ -24,14 +24,18 @@ from custom_components.kano_wand.diagnostics import async_get_config_entry_diagn
 EXPECTED_ENTITY_IDS = {
     "entry_123_last_spell",
     "entry_123_last_spell_confidence",
+    "entry_123_temperature",
     "entry_123_button",
     "entry_123_connected",
+    "entry_123_battery_low",
     "entry_123_spell_event",
+    "entry_123_flick_event",
     "entry_123_led",
     "entry_123_keep_alive_timeout",
     "entry_123_min_spell_confidence",
     "entry_123_vibrate",
     "entry_123_recentre",
+    "entry_123_calibrate_magnetometer",
     "entry_123_disconnect",
     "entry_123_last_spell_drawing",
     "entry_123_auto_connect",
@@ -282,6 +286,31 @@ async def test_spell_events_sensor_image_and_quaternion_stream(
     assert spell_image.extra_state_attributes["status"] == "unrecognized"
     assert spell_image.extra_state_attributes["closest_spell"] == "Flipendo"
     assert spell_image._attr_image_last_updated >= prev_image_updated
+
+    # Verify Battery (0 = Normal, 1 = Low), Temperature, and Flick entities
+    battery_sensor = hass.entities["entry_123_battery_low"]
+    temp_sensor = hass.entities["entry_123_temperature"]
+    flick_event = hass.entities["entry_123_flick_event"]
+
+    assert battery_sensor.is_on is False
+    wand._on_battery_notification(None, bytearray([1]))
+    assert battery_sensor.is_on is True
+    wand._on_battery_notification(None, bytearray([0]))
+    assert battery_sensor.is_on is False
+
+    wand._on_temperature_notification(None, bytearray(struct.pack("<h", 24)))
+    assert temp_sensor.native_value == 24.0
+
+    # Simulate flick while button is not pressed
+    wand.flick_detector.reset()
+    assert wand.flick_detector.process_point(400, 300, now=10.0) is None
+    assert wand.flick_detector.process_point(550, 300, now=10.05) is None
+    assert wand.flick_detector.process_point(700, 300, now=10.10) is None
+    flick_res = wand.flick_detector.process_point(702, 300, now=10.15)
+    assert flick_res is not None and flick_res["direction"] == "right"
+    wand.on_flick_cb(flick_res)
+    assert flick_event.last_event_type == "right"
+    assert flick_event.last_event_attributes["direction"] == "right"
 
     wand._on_disconnected(fake_ble_client)
     assert hass.entities["entry_123_connected"].is_on is False
